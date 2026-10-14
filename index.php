@@ -78,8 +78,53 @@ require_once __DIR__ . '/includes/header.php';
 <section class="bg-light">
     <div class="container">
         <div class="split">
-            <div class="split-img" data-aos="fade-right">
-                <img src="<?= ASSETS_URL ?>/img/about.jpg" alt="Campus SCHOOMA" loading="lazy" onerror="this.src='data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22600%22 height=%22440%22%3E%3Crect width=%22600%22 height=%22440%22 fill=%22%230b3d91%22/%3E%3C/svg%3E'">
+            <div class="split-img motion-mockup" data-aos="fade-right" aria-hidden="true">
+                <div class="mockup-frame">
+                    <div class="mockup-topbar">
+                        <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
+                    </div>
+                    <div class="mockup-body">
+                        <div class="mockup-sidebar">
+                            <span class="mockup-logo-dot"></span>
+                            <span class="mockup-nav-line w1"></span>
+                            <span class="mockup-nav-line w2"></span>
+                            <span class="mockup-nav-line w3"></span>
+                            <span class="mockup-nav-line w4"></span>
+                            <span class="mockup-nav-line w2"></span>
+                        </div>
+                        <div class="mockup-main">
+                            <div class="mockup-stats">
+                                <div class="mockup-stat-card"><i class="fa-solid fa-shield-halved"></i><span class="mockup-bar-track"><span class="mockup-bar-fill fill-1"></span></span></div>
+                                <div class="mockup-stat-card"><i class="fa-solid fa-gauge-high"></i><span class="mockup-bar-track"><span class="mockup-bar-fill fill-2"></span></span></div>
+                                <div class="mockup-stat-card"><i class="fa-solid fa-sack-dollar"></i><span class="mockup-bar-track"><span class="mockup-bar-fill fill-3"></span></span></div>
+                            </div>
+                            <div class="mockup-chart">
+                                <span class="mockup-chart-bar cb1"></span>
+                                <span class="mockup-chart-bar cb2"></span>
+                                <span class="mockup-chart-bar cb3"></span>
+                                <span class="mockup-chart-bar cb4"></span>
+                                <span class="mockup-chart-bar cb5"></span>
+                                <span class="mockup-chart-bar cb6"></span>
+                            </div>
+                            <div class="mockup-checklist">
+                                <div class="mockup-check-item">
+                                    <svg class="mockup-check-circle" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/><path class="mockup-check-mark" d="M10 18l5 5 11-11"/></svg>
+                                    <span class="mockup-check-line w1"></span>
+                                </div>
+                                <div class="mockup-check-item delay-1">
+                                    <svg class="mockup-check-circle" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/><path class="mockup-check-mark" d="M10 18l5 5 11-11"/></svg>
+                                    <span class="mockup-check-line w2"></span>
+                                </div>
+                                <div class="mockup-check-item delay-2">
+                                    <svg class="mockup-check-circle" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/><path class="mockup-check-mark" d="M10 18l5 5 11-11"/></svg>
+                                    <span class="mockup-check-line w3"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mockup-float float-1"><i class="fa-solid fa-cloud"></i></div>
+                    <div class="mockup-float float-2"><i class="fa-solid fa-graduation-cap"></i></div>
+                </div>
             </div>
             <div data-aos="fade-left">
                 <span class="eyebrow">A propos</span>
