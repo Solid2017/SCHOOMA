@@ -78,7 +78,7 @@ require_once __DIR__ . '/includes/header.php';
 <section class="bg-light">
     <div class="container">
         <div class="split">
-            <div class="split-img motion-mockup" data-aos="fade-right" aria-hidden="true">
+            <div class="split-img motion-mockup" data-aos="fade-right" aria-hidden="true" style="max-height:440px;">
                 <div class="mockup-frame">
                     <div class="mockup-topbar">
                         <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
@@ -108,15 +108,15 @@ require_once __DIR__ . '/includes/header.php';
                             </div>
                             <div class="mockup-checklist">
                                 <div class="mockup-check-item">
-                                    <svg class="mockup-check-circle" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/><path class="mockup-check-mark" d="M10 18l5 5 11-11"/></svg>
+                                    <svg class="mockup-check-circle" width="20" height="20" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#cbd5e0" stroke-width="2"/><path class="mockup-check-mark" fill="none" stroke-width="3" d="M10 18l5 5 11-11"/></svg>
                                     <span class="mockup-check-line w1"></span>
                                 </div>
                                 <div class="mockup-check-item delay-1">
-                                    <svg class="mockup-check-circle" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/><path class="mockup-check-mark" d="M10 18l5 5 11-11"/></svg>
+                                    <svg class="mockup-check-circle" width="20" height="20" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#cbd5e0" stroke-width="2"/><path class="mockup-check-mark" fill="none" stroke-width="3" d="M10 18l5 5 11-11"/></svg>
                                     <span class="mockup-check-line w2"></span>
                                 </div>
                                 <div class="mockup-check-item delay-2">
-                                    <svg class="mockup-check-circle" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/><path class="mockup-check-mark" d="M10 18l5 5 11-11"/></svg>
+                                    <svg class="mockup-check-circle" width="20" height="20" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#cbd5e0" stroke-width="2"/><path class="mockup-check-mark" fill="none" stroke-width="3" d="M10 18l5 5 11-11"/></svg>
                                     <span class="mockup-check-line w3"></span>
                                 </div>
                             </div>
