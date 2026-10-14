@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /includes/
+Disallow: /api/
+Disallow: /assets/uploads/
+
+Sitemap: https://schooma.igotech.tech/sitemap.php

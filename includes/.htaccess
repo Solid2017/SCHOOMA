@@ -1,0 +1,2 @@
+# Bloque tout acces direct aux fichiers d'inclusion PHP
+Require all denied
