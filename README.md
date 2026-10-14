@@ -36,6 +36,12 @@ Changez ces mots de passe depuis **Admin > Mon profil** des la premiere connexio
 └── database.sql     script d'initialisation complet (schema + donnees de demo)
 ```
 
+## Donnees de test par ecole cliente
+
+Le dossier `database/` contient des scripts de migration additionnels a importer **apres** `database.sql`, pour peupler une ecole cliente specifique avec des donnees de demonstration realistes (filieres, matieres, enseignants, etudiants, inscriptions, paiements, notes).
+
+- `database/seed_shimt.sql` : institut **SHIMT** (10 filieres, 40 etudiants, 12 enseignants, paiements et notes de demo). Compte admin cree automatiquement : `admin@shimt-institute.com` / `Shimt@2026` (a changer des la premiere connexion).
+
 ## Roles
 
 - **Super Administrateur SaaS** : gere les ecoles clientes, les plans d'abonnement et la facturation.
