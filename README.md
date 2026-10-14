@@ -41,6 +41,7 @@ Changez ces mots de passe depuis **Admin > Mon profil** des la premiere connexio
 Le dossier `database/` contient des scripts de migration additionnels a importer **apres** `database.sql`, pour peupler une ecole cliente specifique avec des donnees de demonstration realistes (filieres, matieres, enseignants, etudiants, inscriptions, paiements, notes).
 
 - `database/seed_shimt.sql` : institut **SHIMT** (10 filieres, 40 etudiants, 12 enseignants, paiements et notes de demo). Compte admin cree automatiquement : `admin@shimt-institute.com` / `Shimt@2026` (a changer des la premiere connexion).
+- `database/seed_iisan.sql` : **IISAN N'Djamena** (Institut International des Sciences et des Arts du Numerique - 5 filieres numeriques, 20 etudiants, 10 enseignants, paiements et notes de demo). Compte admin cree automatiquement : `admin@iisan.td` / `Iisan@2026` (a changer des la premiere connexion). Informations issues d'une recherche web (site officiel iisan.co non accessible depuis l'environnement de generation) : a verifier/corriger aupres de l'etablissement si besoin.
 
 ## Roles
 
