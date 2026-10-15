@@ -57,6 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'rank' => $row['rank'],
                     'effectif' => $classData['stats']['effectif'],
                     'president' => lmdJuryPresident($db, $schoolId, (int) $published['class_id'], (int) $published['academic_year_id']),
+                    'director' => lmdSchoolOfficial($db, $schoolId, 'directeur_etudes'),
+                    'validation' => lmdJuryValidation($db, $schoolId, (int) $published['class_id'], (int) $published['academic_year_id']),
                 ]);
             } else {
                 $error = 'Resultat indisponible pour le moment. Contactez la scolarite.';

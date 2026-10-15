@@ -10,7 +10,7 @@ $pageTitle = $pageTitle ?? 'Tableau de bord';
 
 $navGroups = [
     'Pilotage' => [
-        ['icon' => 'fa-gauge-high', 'label' => 'Tableau de bord', 'href' => 'index.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
+        ['icon' => 'fa-gauge-high', 'label' => 'Tableau de bord', 'href' => 'index.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT]],
     ],
     'Gestion SaaS' => [
         ['icon' => 'fa-building', 'label' => 'Ecoles clientes', 'href' => 'clients.php', 'roles' => [ROLE_SUPER_ADMIN]],
@@ -18,35 +18,35 @@ $navGroups = [
         ['icon' => 'fa-file-invoice-dollar', 'label' => 'Facturation', 'href' => 'invoices.php', 'roles' => [ROLE_SUPER_ADMIN]],
     ],
     'Structure academique' => [
-        ['icon' => 'fa-calendar-week', 'label' => 'Annees universitaires', 'href' => 'academic_years.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-sitemap', 'label' => 'Filieres / Classes', 'href' => 'classes.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-layer-group', 'label' => 'Unites d\'enseignement', 'href' => 'teaching_units.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-book', 'label' => 'Matieres (ECUE)', 'href' => 'subjects.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
+        ['icon' => 'fa-calendar-week', 'label' => 'Annees universitaires', 'href' => 'academic_years.php', 'roles' => ROLES_SCHOOL_HEADS],
+        ['icon' => 'fa-sitemap', 'label' => 'Filieres / Classes', 'href' => 'classes.php', 'roles' => ROLES_SCHOOL_HEADS],
+        ['icon' => 'fa-layer-group', 'label' => 'Unites d\'enseignement', 'href' => 'teaching_units.php', 'roles' => ROLES_ACADEMIC],
+        ['icon' => 'fa-book', 'label' => 'Matieres (ECUE)', 'href' => 'subjects.php', 'roles' => ROLES_ACADEMIC],
     ],
     'Scolarite' => [
-        ['icon' => 'fa-user-graduate', 'label' => 'Etudiants & Inscriptions', 'href' => 'students.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
+        ['icon' => 'fa-user-graduate', 'label' => 'Etudiants & Inscriptions', 'href' => 'students.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT]],
         ['icon' => 'fa-money-check-dollar', 'label' => 'Paiements (tranches)', 'href' => 'payments.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
     ],
     'Enseignants' => [
-        ['icon' => 'fa-chalkboard-user', 'label' => 'Enseignants', 'href' => 'teachers.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-sack-dollar', 'label' => 'Paiements enseignants', 'href' => 'teacher_payments.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
+        ['icon' => 'fa-chalkboard-user', 'label' => 'Enseignants', 'href' => 'teachers.php', 'roles' => ROLES_SCHOOL_HEADS],
+        ['icon' => 'fa-sack-dollar', 'label' => 'Paiements enseignants', 'href' => 'teacher_payments.php', 'roles' => ROLES_DIRECTION],
     ],
     'Pedagogie' => [
-        ['icon' => 'fa-calendar-days', 'label' => 'Emploi du temps', 'href' => 'schedule.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
-        ['icon' => 'fa-marker', 'label' => 'Notes', 'href' => 'grades.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
-        ['icon' => 'fa-award', 'label' => 'Resultats LMD & releves', 'href' => 'results.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-users-rectangle', 'label' => 'Jurys de deliberation', 'href' => 'juries.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
+        ['icon' => 'fa-calendar-days', 'label' => 'Emploi du temps', 'href' => 'schedule.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT]],
+        ['icon' => 'fa-marker', 'label' => 'Notes', 'href' => 'grades.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT]],
+        ['icon' => 'fa-award', 'label' => 'Resultats LMD & releves', 'href' => 'results.php', 'roles' => ROLES_SCHOOL_HEADS],
+        ['icon' => 'fa-users-rectangle', 'label' => 'Jurys de deliberation', 'href' => 'juries.php', 'roles' => ROLES_SCHOOL_HEADS],
     ],
     'Site web' => [
-        ['icon' => 'fa-envelope-open-text', 'label' => 'Messages', 'href' => 'contacts.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-user-check', 'label' => 'Demandes d\'admission', 'href' => 'admission_requests.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
-        ['icon' => 'fa-paper-plane', 'label' => 'Newsletter', 'href' => 'newsletter.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-newspaper', 'label' => 'Blog / Actualites', 'href' => 'blog.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
+        ['icon' => 'fa-envelope-open-text', 'label' => 'Messages', 'href' => 'contacts.php', 'roles' => ROLES_DIRECTION],
+        ['icon' => 'fa-user-check', 'label' => 'Demandes d\'admission', 'href' => 'admission_requests.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT]],
+        ['icon' => 'fa-paper-plane', 'label' => 'Newsletter', 'href' => 'newsletter.php', 'roles' => ROLES_DIRECTION],
+        ['icon' => 'fa-newspaper', 'label' => 'Blog / Actualites', 'href' => 'blog.php', 'roles' => ROLES_DIRECTION],
         ['icon' => 'fa-pen-to-square', 'label' => 'Contenu du site', 'href' => 'content.php', 'roles' => [ROLE_SUPER_ADMIN]],
     ],
     'Administration' => [
-        ['icon' => 'fa-users-gear', 'label' => 'Utilisateurs & roles', 'href' => 'users.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-key', 'label' => 'Mon profil', 'href' => 'profile.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
+        ['icon' => 'fa-users-gear', 'label' => 'Utilisateurs & roles', 'href' => 'users.php', 'roles' => ROLES_DIRECTION],
+        ['icon' => 'fa-key', 'label' => 'Mon profil', 'href' => 'profile.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT]],
     ],
 ];
 ?>

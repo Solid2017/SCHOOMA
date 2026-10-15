@@ -1,11 +1,13 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../includes/lmd.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_SCHOOL_HEADS);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 $pageTitle = 'Jurys de deliberation';
 $breadcrumb = 'Pedagogie / Jurys';
+// Le Directeur des etudes constitue les jurys ; la Direction generale valide leurs deliberations
+$canManage = hasRole(ROLES_ACADEMIC);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? null)) {
@@ -13,6 +15,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('juries.php?client_id=' . $workingClientId);
     }
     $action = $_POST['action'] ?? '';
+    if (!$canManage) {
+        setFlash('error', 'La constitution des jurys releve du Directeur des etudes.');
+        redirect('juries.php?client_id=' . $workingClientId);
+    }
 
     if ($action === 'create') {
         $name = inputText($_POST['name'] ?? '', 150);
@@ -50,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setFlash('success', 'Jury constitue. Completez si besoin sa composition puis lancez la deliberation.');
         redirect('jury.php?client_id=' . $workingClientId . '&id=' . $juryId);
     } elseif ($action === 'delete') {
-        $stmt = $db->prepare('DELETE FROM juries WHERE id = ? AND client_id = ?');
+        $stmt = $db->prepare('DELETE FROM juries WHERE id = ? AND client_id = ? AND validated_at IS NULL');
         $stmt->execute([(int) ($_POST['id'] ?? 0), $workingClientId]);
         setFlash('success', 'Jury supprime.');
     }
@@ -74,7 +80,8 @@ $teachersStmt = $db->prepare('SELECT id, first_name, last_name, specialty FROM t
 $teachersStmt->execute([$workingClientId]);
 $teachersList = $teachersStmt->fetchAll();
 
-$statusLabels = ['planifie' => ['Planifié', 'info'], 'en_cours' => ['En délibération', 'warning'], 'cloture' => ['Clôturé', 'success']];
+$statusLabels = ['planifie' => ['Planifié', 'info'], 'en_cours' => ['En délibération', 'warning'], 'cloture' => ['À valider (DG)', 'warning'], 'valide' => ['Validé et publié', 'success']];
+$pendingCount = count(array_filter($juries, static fn($j) => $j['status'] === 'cloture' && $j['validated_at'] === null));
 
 require_once __DIR__ . '/inc_header.php';
 ?>
@@ -83,15 +90,21 @@ require_once __DIR__ . '/inc_header.php';
 
 <div class="admin-content-header">
     <div><h2>Jurys de délibération</h2><div class="admin-breadcrumb">Un jury par filière et par session : composition désignée, délibération, procès-verbal.</div></div>
-    <button class="btn btn-primary" data-modal-open="juryModal" <?= empty($classesList) ? 'disabled' : '' ?>><i class="fa-solid fa-plus"></i> Constituer un jury</button>
+    <?php if ($canManage): ?><button class="btn btn-primary" data-modal-open="juryModal" <?= empty($classesList) ? 'disabled' : '' ?>><i class="fa-solid fa-plus"></i> Constituer un jury</button><?php endif; ?>
 </div>
+
+<?php if ($pendingCount > 0): ?>
+    <div class="alert alert-<?= hasRole(ROLES_DIRECTION) ? 'danger' : 'info' ?>"><i class="fa-solid fa-stamp"></i>
+        <?= $pendingCount ?> délibération(s) clôturée(s) en attente de validation par la Direction générale<?= hasRole(ROLES_DIRECTION) ? ' : ouvrez le jury pour valider et publier les résultats.' : '.' ?>
+    </div>
+<?php endif; ?>
 
 <div class="admin-card">
     <div class="table-responsive">
         <table class="data-table">
             <thead><tr><th>Jury</th><th>Filière</th><th>Session</th><th>Date</th><th>Président(e)</th><th>Membres</th><th>Statut</th><th>Actions</th></tr></thead>
             <tbody>
-            <?php foreach ($juries as $j): [$statusLabel, $statusBadge] = $statusLabels[$j['status']] ?? [$j['status'], 'gray']; ?>
+            <?php foreach ($juries as $j): [$statusLabel, $statusBadge] = $statusLabels[$j['validated_at'] !== null ? 'valide' : $j['status']] ?? [$j['status'], 'gray']; ?>
                 <tr>
                     <td><strong><a href="jury.php?client_id=<?= $workingClientId ?>&id=<?= (int) $j['id'] ?>"><?= e($j['name']) ?></a></strong></td>
                     <td><?= e($j['class_name']) ?><br><small style="color:var(--gray-500);"><?= e($j['year_label']) ?></small></td>
@@ -101,14 +114,16 @@ require_once __DIR__ . '/inc_header.php';
                     <td><?= (int) $j['members_count'] ?></td>
                     <td><span class="badge badge-<?= $statusBadge ?>"><?= e($statusLabel) ?></span></td>
                     <td class="action-icons">
-                        <a class="edit" title="Composition et délibération" href="jury.php?client_id=<?= $workingClientId ?>&id=<?= (int) $j['id'] ?>"><i class="fa-solid fa-gavel"></i></a>
+                        <a class="edit" title="<?= $canManage ? 'Composition et délibération' : 'Consulter / valider' ?>" href="jury.php?client_id=<?= $workingClientId ?>&id=<?= (int) $j['id'] ?>"><i class="fa-solid fa-gavel"></i></a>
                         <a class="view" title="Procès-verbal" target="_blank" href="pv.php?client_id=<?= $workingClientId ?>&jury_id=<?= (int) $j['id'] ?>"><i class="fa-solid fa-file-signature"></i></a>
+                        <?php if ($canManage && $j['validated_at'] === null): ?>
                         <form method="post" style="display:inline;" onsubmit="return confirm('Supprimer ce jury ? Les points et décisions de jury déjà saisis sont conservés dans les résultats.');">
                             <?= csrfField() ?>
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="id" value="<?= (int) $j['id'] ?>">
                             <button type="submit" class="delete" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
                         </form>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -118,6 +133,7 @@ require_once __DIR__ . '/inc_header.php';
     </div>
 </div>
 
+<?php if ($canManage): ?>
 <div class="modal-overlay" id="juryModal">
     <div class="modal-box">
         <form method="post">
@@ -165,5 +181,6 @@ require_once __DIR__ . '/inc_header.php';
         </form>
     </div>
 </div>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/inc_footer.php'; ?>

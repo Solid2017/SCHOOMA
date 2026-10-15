@@ -1,10 +1,12 @@
 <?php
 require_once __DIR__ . '/auth.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_SCHOOL_HEADS);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 $pageTitle = 'Enseignants';
 $breadcrumb = 'Enseignants / Liste';
+// Remuneration des enseignants : decision de la Direction generale (DG / PCA)
+$canSetPay = hasRole(ROLES_DIRECTION);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? null)) {
@@ -27,15 +29,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($firstName === '' || $lastName === '') {
             setFlash('error', 'Nom et prenom obligatoires.');
         } elseif ($id > 0) {
-            $stmt = $db->prepare('UPDATE teachers SET matricule=?, first_name=?, last_name=?, email=?, phone=?, specialty=?, hourly_rate=?, status=? WHERE id=? AND client_id=?');
-            $stmt->execute([$matricule, $firstName, $lastName, $email, $phone, $specialty, $hourlyRate, $status, $id, $workingClientId]);
+            if ($canSetPay) {
+                $stmt = $db->prepare('UPDATE teachers SET matricule=?, first_name=?, last_name=?, email=?, phone=?, specialty=?, hourly_rate=?, status=? WHERE id=? AND client_id=?');
+                $stmt->execute([$matricule, $firstName, $lastName, $email, $phone, $specialty, $hourlyRate, $status, $id, $workingClientId]);
+            } else {
+                $stmt = $db->prepare('UPDATE teachers SET matricule=?, first_name=?, last_name=?, email=?, phone=?, specialty=?, status=? WHERE id=? AND client_id=?');
+                $stmt->execute([$matricule, $firstName, $lastName, $email, $phone, $specialty, $status, $id, $workingClientId]);
+            }
             setFlash('success', 'Enseignant mis a jour.');
         } else {
             $stmt = $db->prepare('INSERT INTO teachers (client_id, matricule, first_name, last_name, email, phone, specialty, hourly_rate, status) VALUES (?,?,?,?,?,?,?,?,?)');
-            $stmt->execute([$workingClientId, $matricule, $firstName, $lastName, $email, $phone, $specialty, $hourlyRate, $status]);
-            setFlash('success', 'Enseignant ajoute.');
+            $stmt->execute([$workingClientId, $matricule, $firstName, $lastName, $email, $phone, $specialty, $canSetPay ? $hourlyRate : 0, $status]);
+            setFlash('success', $canSetPay ? 'Enseignant ajoute.' : 'Enseignant ajoute. Sa remuneration sera fixee par la Direction generale.');
         }
-    } elseif ($action === 'delete') {
+    } elseif ($action === 'delete' && $canSetPay) {
         $id = (int) ($_POST['id'] ?? 0);
         $stmt = $db->prepare('DELETE FROM teachers WHERE id = ? AND client_id = ?');
         $stmt->execute([$id, $workingClientId]);
@@ -57,7 +64,7 @@ if (($_GET['export'] ?? '') === 'csv') {
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
-    $csvRows = array_map(fn($t) => [$t['matricule'], $t['first_name'], $t['last_name'], $t['specialty'], $t['phone'], $t['email'], $t['hourly_rate'], $t['status']], $rows);
+    $csvRows = array_map(fn($t) => [$t['matricule'], $t['first_name'], $t['last_name'], $t['specialty'], $t['phone'], $t['email'], $canSetPay ? $t['hourly_rate'] : '-', $t['status']], $rows);
     exportCsv('enseignants.csv', ['Matricule', 'Prenom', 'Nom', 'Specialite', 'Telephone', 'Email', 'Taux horaire', 'Statut'], $csvRows);
 }
 
@@ -87,17 +94,18 @@ require_once __DIR__ . '/inc_header.php';
 
     <div class="table-responsive">
         <table class="data-table">
-            <thead><tr><th>Enseignant</th><th>Specialite</th><th>Contact</th><th>Taux horaire</th><th>Statut</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Enseignant</th><th>Specialite</th><th>Contact</th><?php if ($canSetPay): ?><th>Taux horaire</th><?php endif; ?><th>Statut</th><th>Actions</th></tr></thead>
             <tbody>
-            <?php foreach ($teachers as $t): ?>
+            <?php foreach ($teachers as $t): if (!$canSetPay) { unset($t['hourly_rate']); } ?>
                 <tr>
                     <td><strong><?= sanitize($t['first_name'] . ' ' . $t['last_name']) ?></strong><br><small style="color:var(--gray-500);"><?= sanitize($t['matricule'] ?? '') ?></small></td>
                     <td><?= sanitize($t['specialty'] ?? '-') ?></td>
                     <td><?= sanitize($t['phone'] ?? '') ?><br><small><?= sanitize($t['email'] ?? '') ?></small></td>
-                    <td><?= formatMoney($t['hourly_rate']) ?>/h</td>
+                    <?php if ($canSetPay): ?><td><?= formatMoney($t['hourly_rate']) ?>/h</td><?php endif; ?>
                     <td><span class="badge badge-<?= $t['status'] === 'actif' ? 'success' : 'gray' ?>"><?= sanitize($t['status']) ?></span></td>
                     <td class="action-icons">
                         <button class="edit" title="Modifier" onclick='editTeacher(<?= json_encode($t, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'><i class="fa-solid fa-pen"></i></button>
+                        <?php if ($canSetPay): ?>
                         <a class="view" title="Paiements" href="teacher_payments.php?client_id=<?= $workingClientId ?>&teacher_id=<?= (int) $t['id'] ?>"><i class="fa-solid fa-sack-dollar"></i></a>
                         <form method="post" style="display:inline;" onsubmit="return confirm('Supprimer cet enseignant ?');">
                             <?= csrfField() ?>
@@ -105,10 +113,11 @@ require_once __DIR__ . '/inc_header.php';
                             <input type="hidden" name="id" value="<?= (int) $t['id'] ?>">
                             <button type="submit" class="delete" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
                         </form>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (empty($teachers)): ?><tr><td colspan="6" class="text-center">Aucun enseignant trouve.</td></tr><?php endif; ?>
+            <?php if (empty($teachers)): ?><tr><td colspan="<?= $canSetPay ? 6 : 5 ?>" class="text-center">Aucun enseignant trouve.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -135,7 +144,9 @@ require_once __DIR__ . '/inc_header.php';
                     <div class="form-group"><label>Email</label><input type="email" class="form-control" name="email" id="teacher_email"></div>
                 </div>
                 <div class="grid grid-2" style="gap:16px;">
+                    <?php if ($canSetPay): ?>
                     <div class="form-group"><label>Taux horaire (FCFA)</label><input type="number" step="0.01" min="0" class="form-control" name="hourly_rate" id="teacher_hourly_rate" value="0"></div>
+                    <?php else: ?><input type="hidden" id="teacher_hourly_rate"><?php endif; ?>
                     <div class="form-group"><label>Statut</label>
                         <select class="form-control" name="status" id="teacher_status">
                             <option value="actif">Actif</option><option value="inactif">Inactif</option>
@@ -167,7 +178,7 @@ function editTeacher(t) {
     document.getElementById('teacher_specialty').value = t.specialty || '';
     document.getElementById('teacher_phone').value = t.phone || '';
     document.getElementById('teacher_email').value = t.email || '';
-    document.getElementById('teacher_hourly_rate').value = t.hourly_rate;
+    document.getElementById('teacher_hourly_rate').value = t.hourly_rate || 0;
     document.getElementById('teacher_status').value = t.status;
     document.getElementById('teacherModal').classList.add('open');
 }

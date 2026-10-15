@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../includes/lmd.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]);
+requireRole([ROLE_SUPER_ADMIN, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT]);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 $pageTitle = 'Saisie des notes';
@@ -29,6 +29,14 @@ if (!isset($subjectsList[$subjectId])) {
 $subject = $subjectsList[$subjectId] ?? null;
 $baseUrl = "grades.php?client_id=$workingClientId&class_id=$classId&subject_id=$subjectId";
 
+// Une deliberation cloturee (ou validee par la Direction generale) fige les notes de la filiere
+$lockingJury = null;
+if ($class) {
+    $stmt = $db->prepare('SELECT id, name, validated_at FROM juries WHERE client_id = ? AND class_id = ? AND academic_year_id = ? AND status = "cloture" ORDER BY deliberated_at DESC LIMIT 1');
+    $stmt->execute([$workingClientId, $classId, $class['academic_year_id']]);
+    $lockingJury = $stmt->fetch() ?: null;
+}
+
 $students = [];
 if ($class) {
     $stmt = $db->prepare('SELECT s.id, s.matricule, s.first_name, s.last_name, s.status FROM students s JOIN registrations r ON r.student_id = s.id
@@ -48,6 +56,10 @@ $normalize = static fn(string $v): string => trim(str_replace(',', '.', $v));
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? null)) {
         setFlash('error', 'Session expiree, veuillez reessayer.');
+        redirect($baseUrl);
+    }
+    if ($lockingJury) {
+        setFlash('error', 'Notes figees : la deliberation de cette filiere est cloturee. Le jury doit etre rouvert pour toute modification.');
         redirect($baseUrl);
     }
     if (($_POST['action'] ?? '') === 'save_grid' && $class && $subject) {
@@ -127,6 +139,7 @@ require_once __DIR__ . '/inc_header.php';
     <?php elseif (!$students): ?>
         <div class="alert alert-info"><i class="fa-solid fa-circle-info"></i> Aucun étudiant inscrit dans cette filière pour <?= e($class['year_label']) ?>.</div>
     <?php else: ?>
+        <?php if ($lockingJury): ?><div class="alert alert-info"><i class="fa-solid fa-lock"></i> Notes figées : délibération « <?= e($lockingJury['name']) ?> » clôturée<?= $lockingJury['validated_at'] ? ' et validée par la Direction générale' : '' ?>. Toute modification nécessite la réouverture du jury.</div><?php endif; ?>
         <?php if ($orphan): ?><div class="alert alert-danger"><i class="fa-solid fa-triangle-exclamation"></i> Cette matière n'est rattachée à aucune UE : ses notes ne comptent pas dans le calcul LMD.</div><?php endif; ?>
         <p style="margin-bottom:14px;"><strong><?= e($subject['name']) ?></strong>
             <?php if (!$orphan): ?> · Semestre <?= (int) $subject['semester'] ?> · <?= e($subject['ue_code']) ?> · <?= lmdFormatCredits($subject['credits'] !== null ? (float) $subject['credits'] : null) ?> crédit(s) · coef. <?= lmdFormatCredits((float) $subject['coefficient']) ?><?php endif; ?>
@@ -152,7 +165,7 @@ require_once __DIR__ . '/inc_header.php';
                             <?php foreach ($columns as $key => $col):
                                 $value = $mark[$key] === null ? '' : rtrim(rtrim(number_format($mark[$key], 2, '.', ''), '0'), '.'); ?>
                                 <td>
-                                    <input type="text" inputmode="decimal" class="grid-input" name="grades[<?= $sid ?>][<?= $key ?>]" value="<?= e($value) ?>" placeholder="-" aria-label="<?= e($col['label']) ?>">
+                                    <input type="text" inputmode="decimal" class="grid-input" name="grades[<?= $sid ?>][<?= $key ?>]" value="<?= e($value) ?>" placeholder="-" aria-label="<?= e($col['label']) ?>" <?= $lockingJury ? 'disabled' : '' ?>>
                                     <input type="hidden" name="previous[<?= $sid ?>][<?= $key ?>]" value="<?= e($value) ?>">
                                 </td>
                             <?php endforeach; ?>
@@ -164,7 +177,7 @@ require_once __DIR__ . '/inc_header.php';
                 </table>
             </div>
             <p style="font-size:0.8rem;color:var(--gray-500);margin-top:10px;">* note obtenue en session de rattrapage. Vider une case efface la note correspondante.</p>
-            <button type="submit" class="btn btn-primary mt-2"><i class="fa-solid fa-floppy-disk"></i> Enregistrer les notes</button>
+            <?php if (!$lockingJury): ?><button type="submit" class="btn btn-primary mt-2"><i class="fa-solid fa-floppy-disk"></i> Enregistrer les notes</button><?php endif; ?>
         </form>
     <?php endif; ?>
 </div>

@@ -1,6 +1,6 @@
 -- ============================================================================
 -- SCHOOMA - Donnees de demonstration LMD pour l'IISAN N'Djamena (Institut International des Sciences et des Arts du Numérique)
--- Genere par database/generate_seeds.php. Prerequis : database.sql (ou migration 001_lmd.sql).
+-- Genere par database/generate_seeds.php. Prerequis : database.sql (ou migrations 001_lmd.sql + 002_roles.sql).
 -- ATTENTION : supprime puis recree l'etablissement "iisan-ndjamena" et TOUTES ses donnees.
 -- ============================================================================
 
@@ -8,14 +8,16 @@ SET NAMES utf8mb4;
 START TRANSACTION;
 
 DELETE FROM clients WHERE slug = 'iisan-ndjamena';
-DELETE FROM users WHERE email = 'admin@iisan.td';
+DELETE FROM users WHERE email IN ('admin@iisan.td', 'de@iisan.td');
 
 INSERT INTO clients (name, slug, email, phone, address, city, plan_id, status) VALUES ('IISAN N''Djamena', 'iisan-ndjamena', 'contact@iisan.td', '+235 66 65 66 34', 'Avenue Pascal Yoadimnadji, Chagoua, Tchad', 'N''Djamena', (SELECT id FROM subscription_plans WHERE slug = 'pro'), 'actif');
 SET @client_id = LAST_INSERT_ID();
 INSERT INTO academic_years (client_id, label, start_date, end_date, is_current) VALUES (@client_id, '2025-2026', '2025-10-01', '2026-07-31', 1);
 SET @ay_id = LAST_INSERT_ID();
--- Compte administrateur : admin@iisan.td / Iisan@2026 (a changer des la premiere connexion)
-INSERT INTO users (client_id, name, email, password_hash, role, status) VALUES (@client_id, 'Administrateur IISAN', 'admin@iisan.td', '$2y$10$XybNhCypUS4FryzZd0bd0u8F4iMvpb5TCtpHs8qiwZmnTm/aCAtI.', 'admin_ecole', 'actif');
+-- Compte Directeur General : admin@iisan.td / Iisan@2026 (a changer des la premiere connexion)
+INSERT INTO users (client_id, name, email, password_hash, role, job_title, status) VALUES (@client_id, 'Direction Generale IISAN', 'admin@iisan.td', '$2y$10$eDZTzCqKyr/Pg1uX9UQ5k.fHKCKgF.qb4xjUAAmu.sqZS0vsZka.O', 'admin_ecole', 'Directeur General', 'actif');
+-- Compte Directeur des etudes : de@iisan.td / DeIisan@2026 (a changer des la premiere connexion)
+INSERT INTO users (client_id, name, email, password_hash, role, job_title, status) VALUES (@client_id, 'Direction des etudes IISAN', 'de@iisan.td', '$2y$10$Z6UvK3bOTKUG7L/99QiB8uHNsoN.0abATKhKzEZPcO8nF4Y.uGlP.', 'directeur_etudes', 'Directeur des etudes', 'actif');
 
 -- ---- Enseignants ----
 INSERT INTO teachers (client_id, matricule, first_name, last_name, email, phone, specialty, hourly_rate, status) VALUES (@client_id, 'ENS-IISAN-001', 'Younous', 'Abdelkerim', 'younous.abdelkerim@iisan.td', '+235 66 29 49 76', 'Développement web', 10000, 'actif');

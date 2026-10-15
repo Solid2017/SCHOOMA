@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../includes/lmd.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_SCHOOL_HEADS);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 $pageTitle = 'Resultats LMD';
@@ -18,12 +18,30 @@ if (!isset($classesList[$classId])) {
 $class = $classesList[$classId] ?? null;
 $baseUrl = "results.php?client_id=$workingClientId&class_id=$classId";
 
+// Le Directeur des etudes calcule et enregistre les resultats ; la Direction generale les publie
+$canCompute = hasRole(ROLES_ACADEMIC);
+$canPublish = hasRole(ROLES_DIRECTION);
+$validatedJury = null;
+if ($class) {
+    $stmt = $db->prepare('SELECT id, validated_at FROM juries WHERE client_id = ? AND class_id = ? AND academic_year_id = ? AND validated_at IS NOT NULL ORDER BY validated_at DESC LIMIT 1');
+    $stmt->execute([$workingClientId, $classId, (int) $class['academic_year_id']]);
+    $validatedJury = $stmt->fetch() ?: null;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? null)) {
         setFlash('error', 'Session expiree, veuillez reessayer.');
         redirect($baseUrl);
     }
     $action = $_POST['action'] ?? '';
+    if (($action === 'compute' && !$canCompute) || (in_array($action, ['publish', 'unpublish'], true) && !$canPublish)) {
+        setFlash('error', $action === 'compute' ? 'Le calcul des resultats releve du Directeur des etudes.' : 'La publication des resultats releve de la Direction generale (DG / PCA).');
+        redirect($baseUrl);
+    }
+    if ($action === 'compute' && $validatedJury) {
+        setFlash('error', 'Resultats homologues par la Direction generale : demandez le retrait de la validation du jury avant tout recalcul.');
+        redirect($baseUrl);
+    }
     if ($class && in_array($action, ['compute', 'publish', 'unpublish'], true)) {
         $yearId = (int) $class['academic_year_id'];
         $data = lmdComputeClass($db, $workingClientId, $classId, $yearId);
@@ -104,7 +122,16 @@ require_once __DIR__ . '/inc_header.php';
             </select>
         </form>
         <?php if ($class): ?>
-            <?php foreach (['compute' => ['Enregistrer les résultats', 'btn-primary', 'fa-calculator'], 'publish' => ['Publier', 'btn-accent', 'fa-bullhorn'], 'unpublish' => ['Dépublier', 'btn-outline', 'fa-eye-slash']] as $act => [$label, $btnClass, $icon]): ?>
+            <?php
+            $actions = [];
+            if ($canCompute && !$validatedJury) {
+                $actions['compute'] = ['Enregistrer les résultats', 'btn-primary', 'fa-calculator'];
+            }
+            if ($canPublish) {
+                $actions['publish'] = ['Publier', 'btn-accent', 'fa-bullhorn'];
+                $actions['unpublish'] = ['Dépublier', 'btn-outline', 'fa-eye-slash'];
+            }
+            foreach ($actions as $act => [$label, $btnClass, $icon]): ?>
                 <form method="post" style="display:inline;" <?= $act !== 'compute' ? 'onsubmit="return confirm(\'Confirmer ?\');"' : '' ?>>
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="<?= $act ?>">
@@ -115,6 +142,9 @@ require_once __DIR__ . '/inc_header.php';
         <?php endif; ?>
     </div>
 
+    <?php if ($validatedJury): ?>
+        <div class="alert alert-success"><i class="fa-solid fa-stamp"></i> Résultats homologués par la Direction générale le <?= formatDate($validatedJury['validated_at'], 'd/m/Y à H:i') ?> (<a href="jury.php?client_id=<?= $workingClientId ?>&id=<?= (int) $validatedJury['id'] ?>">voir le jury</a>).</div>
+    <?php endif; ?>
     <?php if (!$data || !$data['curriculum']): ?>
         <div class="alert alert-info"><i class="fa-solid fa-circle-info"></i> Aucune unité d'enseignement définie pour cette filière : configurez les UE et ECUE pour obtenir des résultats LMD.</div>
     <?php else: ?>

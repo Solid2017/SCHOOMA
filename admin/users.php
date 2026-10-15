@@ -1,14 +1,16 @@
 <?php
 require_once __DIR__ . '/auth.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_DIRECTION);
 $db = getDB();
 $user = currentUser();
 $clientId = scopeClientId();
 $pageTitle = 'Utilisateurs & roles';
 $breadcrumb = 'Administration / Utilisateurs';
 
-// Roles qu'un administrateur d'ecole a le droit d'assigner (jamais super_admin)
-$assignableRoles = $clientId === null ? [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT] : [ROLE_ADMIN_ECOLE, ROLE_ASSISTANT];
+// Roles qu'un DG / PCA a le droit d'assigner dans son ecole (jamais super_admin)
+$schoolRoles = [ROLE_ADMIN_ECOLE, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT];
+$assignableRoles = $clientId === null ? array_merge([ROLE_SUPER_ADMIN], $schoolRoles) : $schoolRoles;
+$defaultTitles = [ROLE_ADMIN_ECOLE => 'Directeur General', ROLE_DIRECTEUR_ETUDES => 'Directeur des etudes', ROLE_ASSISTANT => 'Assistant(e) de scolarite'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? null)) {
@@ -21,9 +23,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int) ($_POST['id'] ?? 0);
         $name = sanitize($_POST['name'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
-        $role = in_array($_POST['role'] ?? '', $assignableRoles, true) ? $_POST['role'] : $assignableRoles[0];
+        $role = in_array($_POST['role'] ?? '', $assignableRoles, true) ? $_POST['role'] : ROLE_ASSISTANT;
+        $jobTitle = inputText($_POST['job_title'] ?? '', 100) ?: ($defaultTitles[$role] ?? null);
         $status = in_array($_POST['status'] ?? '', ['actif', 'inactif'], true) ? $_POST['status'] : 'actif';
         $targetClientId = $clientId ?? ((int) ($_POST['client_id'] ?? 0) ?: null);
+        if ($role === ROLE_SUPER_ADMIN) {
+            $targetClientId = null;
+        } elseif ($targetClientId === null) {
+            setFlash('error', 'Un compte de direction ou de scolarite doit etre rattache a une ecole.');
+            redirect('users.php');
+        }
+        if ($id === (int) $user['id'] && $role !== $user['role']) {
+            setFlash('error', 'Vous ne pouvez pas modifier votre propre role.');
+            redirect('users.php');
+        }
 
         if ($name === '' || !isValidEmail($email)) {
             setFlash('error', 'Veuillez renseigner un nom et un email valides.');
@@ -41,8 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     redirect('users.php');
                 }
             }
-            $stmt = $db->prepare('UPDATE users SET name=?, email=?, role=?, status=? WHERE id=?');
-            $stmt->execute([$name, $email, $role, $status, $id]);
+            $stmt = $db->prepare('UPDATE users SET name=?, email=?, role=?, job_title=?, status=? WHERE id=?');
+            $stmt->execute([$name, $email, $role, $jobTitle, $status, $id]);
             setFlash('success', 'Utilisateur mis a jour avec succes.');
         } else {
             $checkEmail = $db->prepare('SELECT id FROM users WHERE email = ?');
@@ -53,8 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $tempPassword = bin2hex(random_bytes(4));
             $hash = password_hash($tempPassword, PASSWORD_BCRYPT);
-            $stmt = $db->prepare('INSERT INTO users (client_id, name, email, password_hash, role, status) VALUES (?,?,?,?,?,?)');
-            $stmt->execute([$targetClientId, $name, $email, $hash, $role, $status]);
+            $stmt = $db->prepare('INSERT INTO users (client_id, name, email, password_hash, role, job_title, status) VALUES (?,?,?,?,?,?,?)');
+            $stmt->execute([$targetClientId, $name, $email, $hash, $role, $jobTitle, $status]);
             setFlash('success', "Utilisateur cree. Mot de passe temporaire : $tempPassword (a communiquer de maniere securisee)");
         }
     } elseif ($action === 'delete') {
@@ -113,13 +126,14 @@ require_once __DIR__ . '/inc_header.php';
 <div class="admin-card">
     <div class="table-responsive">
         <table class="data-table">
-            <thead><tr><th>Nom</th><th>Email</th><th>Role</th><?php if ($clientId === null): ?><th>Ecole</th><?php endif; ?><th>Statut</th><th>Derniere connexion</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Nom</th><th>Email</th><th>Role</th><th>Fonction</th><?php if ($clientId === null): ?><th>Ecole</th><?php endif; ?><th>Statut</th><th>Derniere connexion</th><th>Actions</th></tr></thead>
             <tbody>
-            <?php foreach ($users as $u): ?>
+            <?php foreach ($users as $u): unset($u['password_hash']); ?>
                 <tr>
                     <td><strong><?= sanitize($u['name']) ?></strong></td>
                     <td><?= sanitize($u['email']) ?></td>
-                    <td><span class="badge badge-info"><?= sanitize(roleLabel($u['role'])) ?></span></td>
+                    <td><span class="badge badge-<?= ['admin_ecole' => 'warning', 'directeur_etudes' => 'success', 'super_admin' => 'danger'][$u['role']] ?? 'info' ?>"><?= sanitize(roleLabel($u['role'])) ?></span></td>
+                    <td><?= e($u['job_title'] ?? '-') ?></td>
                     <?php if ($clientId === null): ?><td><?= sanitize($u['client_name'] ?? 'Plateforme SCHOOMA') ?></td><?php endif; ?>
                     <td><span class="badge badge-<?= $u['status'] === 'actif' ? 'success' : 'gray' ?>"><?= sanitize($u['status']) ?></span></td>
                     <td><?= $u['last_login'] ? formatDate($u['last_login'], 'd/m/Y H:i') : 'Jamais' ?></td>
@@ -142,7 +156,7 @@ require_once __DIR__ . '/inc_header.php';
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (empty($users)): ?><tr><td colspan="7" class="text-center">Aucun utilisateur trouve.</td></tr><?php endif; ?>
+            <?php if (empty($users)): ?><tr><td colspan="8" class="text-center">Aucun utilisateur trouve.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -159,10 +173,12 @@ require_once __DIR__ . '/inc_header.php';
                 <div class="form-group"><label>Nom complet *</label><input type="text" class="form-control" name="name" id="user_name" required></div>
                 <div class="form-group"><label>Email *</label><input type="email" class="form-control" name="email" id="user_email" required></div>
                 <div class="form-group"><label>Role *</label>
-                    <select class="form-control" name="role" id="user_role" required>
-                        <?php foreach ($assignableRoles as $r): ?><option value="<?= $r ?>"><?= sanitize(roleLabel($r)) ?></option><?php endforeach; ?>
+                    <select class="form-control" name="role" id="user_role" required onchange="showRoleHelp()">
+                        <?php foreach ($assignableRoles as $r): ?><option value="<?= $r ?>" data-help="<?= e(roleDescription($r)) ?>" data-title="<?= e($defaultTitles[$r] ?? '') ?>"><?= sanitize(roleLabel($r)) ?></option><?php endforeach; ?>
                     </select>
+                    <small id="user_role_help" style="display:block;color:var(--gray-500);margin-top:6px;"></small>
                 </div>
+                <div class="form-group"><label>Fonction (imprimee sur les documents officiels)</label><input type="text" class="form-control" name="job_title" id="user_job_title" maxlength="100" placeholder="Ex : Directeur General, PCA, Directeur des etudes"></div>
                 <?php if ($clientId === null): ?>
                 <div class="form-group"><label>Ecole (laisser vide pour le Super Admin SaaS)</label>
                     <select class="form-control" name="client_id" id="user_client_id">
@@ -188,12 +204,20 @@ require_once __DIR__ . '/inc_header.php';
 </div>
 
 <script>
+function showRoleHelp() {
+    var opt = document.getElementById('user_role').selectedOptions[0];
+    document.getElementById('user_role_help').textContent = opt ? opt.getAttribute('data-help') : '';
+    var title = document.getElementById('user_job_title');
+    if (opt && !title.value) title.placeholder = opt.getAttribute('data-title') || title.placeholder;
+}
 function resetUserForm() {
     document.getElementById('userModalTitle').textContent = 'Nouvel utilisateur';
     document.getElementById('user_id').value = '';
     document.getElementById('user_name').value = '';
     document.getElementById('user_email').value = '';
     document.getElementById('user_status').value = 'actif';
+    document.getElementById('user_job_title').value = '';
+    showRoleHelp();
 }
 function editUser(u) {
     document.getElementById('userModalTitle').textContent = "Modifier l'utilisateur";
@@ -202,6 +226,8 @@ function editUser(u) {
     document.getElementById('user_email').value = u.email;
     document.getElementById('user_role').value = u.role;
     document.getElementById('user_status').value = u.status;
+    document.getElementById('user_job_title').value = u.job_title || '';
+    showRoleHelp();
     var clientSelect = document.getElementById('user_client_id');
     if (clientSelect) clientSelect.value = u.client_id || '';
     document.getElementById('userModal').classList.add('open');

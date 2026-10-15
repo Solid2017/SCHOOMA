@@ -66,7 +66,9 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(150) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('super_admin','admin_ecole','assistant') NOT NULL DEFAULT 'assistant',
+    -- admin_ecole = Directeur General / PCA (decisionnel) ; directeur_etudes = Directeur des etudes (academique)
+    role ENUM('super_admin','admin_ecole','directeur_etudes','assistant') NOT NULL DEFAULT 'assistant',
+    job_title VARCHAR(100) NULL, -- fonction affichee et imprimee (ex : Directeur General, PCA, Directeur des etudes)
     photo VARCHAR(255) NULL,
     status ENUM('actif','inactif') NOT NULL DEFAULT 'actif',
     last_login TIMESTAMP NULL,
@@ -346,10 +348,13 @@ CREATE TABLE IF NOT EXISTS juries (
     status ENUM('planifie','en_cours','cloture') NOT NULL DEFAULT 'planifie',
     deliberated_at DATETIME NULL,
     observations TEXT NULL,
+    validated_by INT UNSIGNED NULL, -- DG / PCA ayant valide et publie les resultats
+    validated_at DATETIME NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE CASCADE,
-    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_juries_validated_by FOREIGN KEY (validated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Membres designes : enseignant de l'etablissement (teacher_id) ou personnalite externe (full_name)
@@ -429,9 +434,10 @@ INSERT INTO clients (name, slug, email, phone, address, city, plan_id, status, t
 
 -- Mot de passe par defaut : Admin@2026 (a changer immediatement apres 1re connexion)
 -- Hash genere avec password_hash('Admin@2026', PASSWORD_BCRYPT)
-INSERT INTO users (client_id, name, email, password_hash, role, status) VALUES
-(NULL, 'Super Administrateur', 'superadmin@schooma.app', '$2y$12$b35RoQ8AQExMKNUumVj3euZ0ex0i3yFvONXwU9A2olRxuIodkf/.a', 'super_admin', 'actif'),
-(1, 'Administrateur Ecole', 'admin@schooma.igotech.tech', '$2y$12$b35RoQ8AQExMKNUumVj3euZ0ex0i3yFvONXwU9A2olRxuIodkf/.a', 'admin_ecole', 'actif');
+INSERT INTO users (client_id, name, email, password_hash, role, job_title, status) VALUES
+(NULL, 'Super Administrateur', 'superadmin@schooma.app', '$2y$12$b35RoQ8AQExMKNUumVj3euZ0ex0i3yFvONXwU9A2olRxuIodkf/.a', 'super_admin', NULL, 'actif'),
+(1, 'Directeur General (demo)', 'admin@schooma.igotech.tech', '$2y$12$b35RoQ8AQExMKNUumVj3euZ0ex0i3yFvONXwU9A2olRxuIodkf/.a', 'admin_ecole', 'Directeur General', 'actif'),
+(1, 'Directeur des etudes (demo)', 'de@schooma.igotech.tech', '$2y$12$b35RoQ8AQExMKNUumVj3euZ0ex0i3yFvONXwU9A2olRxuIodkf/.a', 'directeur_etudes', 'Directeur des etudes', 'actif');
 
 INSERT INTO academic_years (client_id, label, start_date, end_date, is_current) VALUES
 (1, '2025-2026', '2025-10-01', '2026-07-31', 1);

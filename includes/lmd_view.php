@@ -28,7 +28,8 @@ function lmdSchoolHeaderHtml(array $school, string $title, array $subtitles): st
 
 /**
  * $ctx : school, student, registration (class_name, class_level, year_label), result (lmdComputeStudent),
- *        final_decision, mention, rank, effectif, semesters (null = annuel), president, published
+ *        final_decision, mention, rank, effectif, semesters (null = annuel), president, published,
+ *        director (Directeur des etudes : ['name', 'job_title']), validation (lmdJuryValidation)
  */
 function lmdTranscriptHtml(array $ctx): string
 {
@@ -129,8 +130,11 @@ function lmdTranscriptHtml(array $ctx): string
     $city = $ctx['school']['city'] ?? '';
     $html .= '<footer class="lmd-doc-footer"><div class="lmd-place">Fait' . ($city !== '' ? ' à ' . e($city) : '') . ', le ' . date('d/m/Y') . '</div>'
         . '<div class="lmd-signatures"><div><span>Le Président du jury</span>' . (!empty($ctx['president']) ? '<em>' . e($ctx['president']) . '</em>' : '') . '</div>'
-        . '<div><span>Le Directeur des études</span></div></div>'
-        . '<p class="lmd-disclaimer">Il n\'est délivré qu\'un seul exemplaire du présent relevé. Document généré par ' . e(SITE_NAME) . '.</p></footer>';
+        . '<div><span>Le Directeur des études</span>' . (!empty($ctx['director']['name']) ? '<em>' . e($ctx['director']['name']) . '</em>' : '') . '</div></div>'
+        . '<p class="lmd-disclaimer">' . (!empty($ctx['validation'])
+            ? 'Résultats validés par la Direction générale le ' . e(formatDate($ctx['validation']['validated_at'])) . '. '
+            : '')
+        . 'Il n\'est délivré qu\'un seul exemplaire du présent relevé. Document généré par ' . e(SITE_NAME) . '.</p></footer>';
 
     return $html . '</article>';
 }

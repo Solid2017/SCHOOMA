@@ -1,13 +1,16 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../includes/lmd.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_SCHOOL_HEADS);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 
 $juryId = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
-$stmt = $db->prepare('SELECT j.*, c.name AS class_name, c.level AS class_level, ay.label AS year_label FROM juries j
+$stmt = $db->prepare('SELECT j.*, c.name AS class_name, c.level AS class_level, ay.label AS year_label,
+                             u.name AS validator_name, COALESCE(u.job_title, "") AS validator_title
+                      FROM juries j
                       JOIN classes c ON c.id = j.class_id JOIN academic_years ay ON ay.id = j.academic_year_id
+                      LEFT JOIN users u ON u.id = j.validated_by
                       WHERE j.id = ? AND j.client_id = ?');
 $stmt->execute([$juryId, $workingClientId]);
 $jury = $stmt->fetch();
@@ -18,6 +21,10 @@ if (!$jury) {
 $classId = (int) $jury['class_id'];
 $yearId = (int) $jury['academic_year_id'];
 $closed = $jury['status'] === 'cloture';
+$validated = $jury['validated_at'] !== null;
+// Le Directeur des etudes conduit la deliberation ; la Direction generale (DG / PCA) la valide et publie
+$canDeliberate = hasRole(ROLES_ACADEMIC);
+$canValidate = hasRole(ROLES_DIRECTION);
 $selfUrl = 'jury.php?client_id=' . $workingClientId . '&id=' . $juryId;
 $pageTitle = 'Jury : ' . $jury['name'];
 $breadcrumb = 'Pedagogie / Jurys / ' . $jury['class_name'];
@@ -35,9 +42,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($selfUrl);
     }
     $action = $_POST['action'] ?? '';
-    $editable = !$closed || $action === 'reopen';
+    $directionActions = ['validate', 'send_back', 'unvalidate'];
+    if (in_array($action, $directionActions, true) ? !$canValidate : !$canDeliberate) {
+        setFlash('error', in_array($action, $directionActions, true)
+            ? 'Seule la Direction generale (DG / PCA) peut valider ou renvoyer une deliberation.'
+            : 'La conduite de la deliberation releve du Directeur des etudes.');
+        redirect($selfUrl);
+    }
+    $editable = in_array($action, $directionActions, true) || !$closed || ($action === 'reopen' && !$validated);
     if (!$editable) {
-        setFlash('error', 'Ce jury est cloture : rouvrez-le pour modifier sa composition ou ses decisions.');
+        setFlash('error', $validated
+            ? 'Resultats valides et publies par la Direction generale : elle seule peut retirer la validation.'
+            : 'Ce jury est cloture : rouvrez-le pour modifier sa composition ou ses decisions.');
         redirect($selfUrl);
     }
 
@@ -103,11 +119,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $canClose = $action === 'close' && array_filter($loadMembers(), static fn($m) => $m['role'] === 'president');
         $data = lmdComputeClass($db, $workingClientId, $classId, $yearId);
-        lmdStoreClassResults($db, $workingClientId, $classId, $yearId, $data, $juryId, $canClose ? true : null);
+        // A la cloture, les resultats restent non publies jusqu'a la validation de la Direction generale
+        lmdStoreClassResults($db, $workingClientId, $classId, $yearId, $data, $juryId, $canClose ? false : null);
 
         if ($canClose) {
             $db->prepare('UPDATE juries SET status = "cloture", deliberated_at = NOW(), session_date = COALESCE(session_date, CURDATE()) WHERE id = ?')->execute([$juryId]);
-            setFlash('success', 'Deliberation cloturee : resultats publies. Le proces-verbal est pret a etre imprime.');
+            setFlash('success', 'Deliberation cloturee et transmise a la Direction generale pour validation et publication. Le proces-verbal est pret a etre imprime.');
         } else {
             $db->prepare('UPDATE juries SET status = "en_cours" WHERE id = ? AND status = "planifie"')->execute([$juryId]);
             setFlash($action === 'close' ? 'error' : 'success', $action === 'close'
@@ -118,7 +135,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($selfUrl . ($action === 'close' && !$canClose ? '#composition' : '#deliberation'));
     } elseif ($action === 'reopen') {
         $db->prepare('UPDATE juries SET status = "en_cours" WHERE id = ?')->execute([$juryId]);
-        setFlash('success', 'Jury rouvert : les decisions peuvent etre modifiees (les resultats restent publies).');
+        setFlash('success', 'Jury rouvert : les decisions peuvent etre modifiees.');
+    } elseif ($action === 'validate') {
+        if (!$closed || $validated) {
+            setFlash('error', 'Seule une deliberation cloturee et non encore validee peut etre validee.');
+            redirect($selfUrl);
+        }
+        $db->beginTransaction();
+        $db->prepare('UPDATE results SET published = 1 WHERE client_id = ? AND class_id = ? AND academic_year_id = ?')->execute([$workingClientId, $classId, $yearId]);
+        $db->prepare('UPDATE juries SET validated_by = ?, validated_at = NOW() WHERE id = ?')->execute([(int) currentUser()['id'], $juryId]);
+        $db->commit();
+        setFlash('success', 'Deliberation validee : les resultats sont publies et consultables par les etudiants.');
+    } elseif ($action === 'send_back') {
+        if (!$closed || $validated) {
+            setFlash('error', 'Seule une deliberation cloturee et non validee peut etre renvoyee.');
+            redirect($selfUrl);
+        }
+        $db->prepare('UPDATE juries SET status = "en_cours" WHERE id = ?')->execute([$juryId]);
+        setFlash('success', 'Deliberation renvoyee au Directeur des etudes pour reexamen.');
+    } elseif ($action === 'unvalidate') {
+        if (!$validated) {
+            redirect($selfUrl);
+        }
+        $db->beginTransaction();
+        $db->prepare('UPDATE results SET published = 0 WHERE client_id = ? AND class_id = ? AND academic_year_id = ?')->execute([$workingClientId, $classId, $yearId]);
+        $db->prepare('UPDATE juries SET validated_by = NULL, validated_at = NULL WHERE id = ?')->execute([$juryId]);
+        $db->commit();
+        setFlash('success', 'Validation retiree : les resultats ne sont plus publies. Le Directeur des etudes peut rouvrir la deliberation.');
     }
     redirect($selfUrl);
 }
@@ -134,7 +177,15 @@ $data = lmdComputeClass($db, $workingClientId, $classId, $yearId);
 $semesterNumbers = array_keys($data['curriculum']);
 $st = $data['stats'];
 $memberName = static fn(array $m): string => $m['teacher_id'] ? $m['first_name'] . ' ' . $m['last_name'] : (string) $m['full_name'];
-$disabled = $closed ? 'disabled' : '';
+$locked = $closed || !$canDeliberate;
+$disabled = $locked ? 'disabled' : '';
+if ($validated) {
+    $statusBadge = '<span class="badge badge-success">Validé et publié le ' . formatDate($jury['validated_at'], 'd/m/Y H:i') . ($jury['validator_name'] ? ' par ' . e($jury['validator_name']) : '') . '</span>';
+} elseif ($closed) {
+    $statusBadge = '<span class="badge badge-warning">Clôturé le ' . formatDate($jury['deliberated_at'], 'd/m/Y H:i') . ' · en attente de validation DG</span>';
+} else {
+    $statusBadge = '<span class="badge badge-' . ($jury['status'] === 'en_cours' ? 'warning">En délibération' : 'info">Planifié') . '</span>';
+}
 
 require_once __DIR__ . '/inc_header.php';
 ?>
@@ -143,16 +194,36 @@ require_once __DIR__ . '/inc_header.php';
     <div>
         <h2><?= e($jury['name']) ?></h2>
         <div class="admin-breadcrumb"><?= e($jury['class_name']) ?> · <?= e($jury['class_level']) ?> · <?= e($jury['year_label']) ?> · session <?= $jury['session_type'] === 'rattrapage' ? 'de rattrapage' : 'normale' ?>
-            · <?= $closed ? '<span class="badge badge-success">Clôturé le ' . formatDate($jury['deliberated_at'], 'd/m/Y H:i') . '</span>' : '<span class="badge badge-' . ($jury['status'] === 'en_cours' ? 'warning">En délibération' : 'info">Planifié') . '</span>' ?></div>
+            · <?= $statusBadge ?></div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <a href="pv.php?client_id=<?= $workingClientId ?>&jury_id=<?= $juryId ?>" target="_blank" class="btn btn-outline"><i class="fa-solid fa-file-signature"></i> Procès-verbal</a>
         <a href="transcript.php?client_id=<?= $workingClientId ?>&class_id=<?= $classId ?>" target="_blank" class="btn btn-outline"><i class="fa-solid fa-print"></i> Relevés de la filière</a>
-        <?php if ($closed): ?>
-            <form method="post" onsubmit="return confirm('Rouvrir la délibération ?');"><?= csrfField() ?><input type="hidden" name="action" value="reopen"><input type="hidden" name="id" value="<?= $juryId ?>"><button class="btn btn-accent"><i class="fa-solid fa-lock-open"></i> Rouvrir</button></form>
+        <?php if ($closed && !$validated && $canDeliberate): ?>
+            <form method="post" onsubmit="return confirm('Rouvrir la délibération ?');"><?= csrfField() ?><input type="hidden" name="action" value="reopen"><input type="hidden" name="id" value="<?= $juryId ?>"><button class="btn btn-outline"><i class="fa-solid fa-lock-open"></i> Rouvrir</button></form>
         <?php endif; ?>
     </div>
 </div>
+
+<?php if ($canValidate && $closed && !$validated): ?>
+    <div class="admin-card" style="border-left:4px solid var(--accent);">
+        <div class="admin-card-header"><h3><i class="fa-solid fa-stamp"></i> Décision de la Direction générale</h3></div>
+        <p style="margin-bottom:14px;">Le jury a clôturé sa délibération le <?= formatDate($jury['deliberated_at'], 'd/m/Y à H:i') ?>. Après examen du procès-verbal, validez pour publier les résultats de la filière, ou renvoyez la délibération au Directeur des études.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <form method="post" onsubmit="return confirm('Valider la délibération et publier les résultats de la filière ?');"><?= csrfField() ?><input type="hidden" name="action" value="validate"><input type="hidden" name="id" value="<?= $juryId ?>"><button class="btn btn-accent"><i class="fa-solid fa-circle-check"></i> Valider et publier les résultats</button></form>
+            <form method="post" onsubmit="return confirm('Renvoyer la délibération au Directeur des études ?');"><?= csrfField() ?><input type="hidden" name="action" value="send_back"><input type="hidden" name="id" value="<?= $juryId ?>"><button class="btn btn-outline"><i class="fa-solid fa-rotate-left"></i> Renvoyer en délibération</button></form>
+        </div>
+    </div>
+<?php elseif ($canValidate && $validated): ?>
+    <div class="alert alert-success" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span><i class="fa-solid fa-circle-check"></i> Résultats validés<?= $jury['validator_name'] ? ' par ' . e($jury['validator_name']) : '' ?> le <?= formatDate($jury['validated_at'], 'd/m/Y à H:i') ?> et publiés.</span>
+        <form method="post" onsubmit="return confirm('Retirer la validation ? Les résultats de la filière ne seront plus publiés.');"><?= csrfField() ?><input type="hidden" name="action" value="unvalidate"><input type="hidden" name="id" value="<?= $juryId ?>"><button class="btn btn-outline btn-sm"><i class="fa-solid fa-eye-slash"></i> Retirer la validation</button></form>
+    </div>
+<?php elseif (!$canDeliberate && !$closed): ?>
+    <div class="alert alert-info"><i class="fa-solid fa-circle-info"></i> Délibération en cours de préparation par le Directeur des études. Elle vous sera soumise pour validation après sa clôture.</div>
+<?php elseif ($canDeliberate && $closed && !$validated): ?>
+    <div class="alert alert-info"><i class="fa-solid fa-hourglass-half"></i> Délibération transmise à la Direction générale : les résultats seront publiés après sa validation.</div>
+<?php endif; ?>
 
 <div class="grid grid-2" id="composition">
     <div class="admin-card">
@@ -174,7 +245,7 @@ require_once __DIR__ . '/inc_header.php';
                             </form>
                         </td>
                         <td class="action-icons">
-                            <?php if (!$closed): ?>
+                            <?php if (!$locked): ?>
                             <form method="post" onsubmit="return confirm('Retirer ce membre ?');"><?= csrfField() ?><input type="hidden" name="action" value="remove_member"><input type="hidden" name="id" value="<?= $juryId ?>"><input type="hidden" name="member_id" value="<?= (int) $m['id'] ?>"><button class="delete" title="Retirer"><i class="fa-solid fa-user-minus"></i></button></form>
                             <?php endif; ?>
                         </td>
@@ -184,7 +255,7 @@ require_once __DIR__ . '/inc_header.php';
                 </tbody>
             </table>
         </div>
-        <?php if (!$closed): ?>
+        <?php if (!$locked): ?>
         <form method="post" style="margin-top:18px;">
             <?= csrfField() ?>
             <input type="hidden" name="action" value="add_member">
@@ -221,7 +292,7 @@ require_once __DIR__ . '/inc_header.php';
             </div>
             <div class="form-group"><label>Lieu</label><input type="text" class="form-control" name="location" maxlength="150" value="<?= e($jury['location']) ?>" <?= $disabled ?>></div>
             <div class="form-group"><label>Observations générales (reprises dans le PV)</label><textarea class="form-control" name="observations" rows="3" <?= $disabled ?>><?= e($jury['observations']) ?></textarea></div>
-            <?php if (!$closed): ?><button class="btn btn-outline btn-sm">Enregistrer</button><?php endif; ?>
+            <?php if (!$locked): ?><button class="btn btn-outline btn-sm">Enregistrer</button><?php endif; ?>
         </form>
         <div class="pv-stats" style="margin-top:18px;">
             <div><strong><?= $st['effectif'] ?></strong>Étudiants</div>
@@ -276,10 +347,10 @@ require_once __DIR__ . '/inc_header.php';
                 </tbody>
             </table>
         </div>
-        <?php if (!$closed && $data['rows']): ?>
+        <?php if (!$locked && $data['rows']): ?>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;">
             <button class="btn btn-primary" name="action" value="deliberate"><i class="fa-solid fa-floppy-disk"></i> Enregistrer la délibération</button>
-            <button class="btn btn-accent" name="action" value="close" onclick="return confirm('Clôturer la délibération ? Les résultats de la filière seront publiés et le jury verrouillé.');"><i class="fa-solid fa-lock"></i> Clôturer et publier</button>
+            <button class="btn btn-accent" name="action" value="close" onclick="return confirm('Clôturer la délibération ? Le jury sera verrouillé et les résultats transmis à la Direction générale pour validation et publication.');"><i class="fa-solid fa-lock"></i> Clôturer et transmettre au DG</button>
         </div>
         <?php if ($st['attente'] > 0): ?><p style="font-size:.85rem;color:var(--danger);margin-top:10px;"><?= $st['attente'] ?> étudiant(s) sans notes sur tous les semestres : décision en attente.</p><?php endif; ?>
         <?php endif; ?>

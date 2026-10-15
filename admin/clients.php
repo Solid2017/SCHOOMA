@@ -37,18 +37,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$name, $slug, $email, $phone, $address, $city, $planId, $status, date('Y-m-d', strtotime('+30 days'))]);
             $newClientId = (int) $db->lastInsertId();
 
-            // Creation automatique du compte administrateur de l'ecole
-            $adminName = sanitize($_POST['admin_name'] ?? ($name . ' Admin'));
-            $adminEmail = sanitize($_POST['admin_email'] ?? $email);
+            // Creation automatique du compte de direction (DG / PCA) de l'ecole
+            $adminName = sanitize(trim($_POST['admin_name'] ?? '') ?: ('Direction ' . $name));
+            $adminEmail = sanitize(trim($_POST['admin_email'] ?? '') ?: $email);
+            $adminTitle = inputText($_POST['admin_title'] ?? '', 100) ?: 'Directeur General';
             $tempPassword = bin2hex(random_bytes(4));
             $hash = password_hash($tempPassword, PASSWORD_BCRYPT);
 
             $checkEmail = $db->prepare('SELECT id FROM users WHERE email = ?');
             $checkEmail->execute([$adminEmail]);
             if (!$checkEmail->fetch()) {
-                $stmt = $db->prepare('INSERT INTO users (client_id, name, email, password_hash, role, status) VALUES (?,?,?,?,?,"actif")');
-                $stmt->execute([$newClientId, $adminName, $adminEmail, $hash, ROLE_ADMIN_ECOLE]);
-                setFlash('success', "Ecole creee avec succes. Compte admin : $adminEmail / mot de passe temporaire : $tempPassword");
+                $stmt = $db->prepare('INSERT INTO users (client_id, name, email, password_hash, role, job_title, status) VALUES (?,?,?,?,?,?,"actif")');
+                $stmt->execute([$newClientId, $adminName, $adminEmail, $hash, ROLE_ADMIN_ECOLE, $adminTitle]);
+                setFlash('success', "Ecole creee avec succes. Compte DG / PCA : $adminEmail / mot de passe temporaire : $tempPassword (il pourra creer le compte du Directeur des etudes).");
             } else {
                 setFlash('success', 'Ecole creee avec succes. (Un utilisateur existait deja avec cet email, aucun compte admin cree automatiquement.)');
             }
@@ -150,9 +151,10 @@ require_once __DIR__ . '/inc_header.php';
                 </div>
                 <div id="clientAdminFields">
                     <hr style="margin:18px 0;border-color:var(--gray-300);">
-                    <p style="font-size:0.85rem;color:var(--gray-500);margin-bottom:12px;">Un compte administrateur d'ecole sera cree automatiquement avec un mot de passe temporaire.</p>
-                    <div class="form-group"><label>Nom de l'administrateur</label><input type="text" class="form-control" name="admin_name" placeholder="Ex: Directeur des etudes"></div>
-                    <div class="form-group"><label>Email de l'administrateur</label><input type="email" class="form-control" name="admin_email" placeholder="Laisser vide pour reutiliser l'email de contact"></div>
+                    <p style="font-size:0.85rem;color:var(--gray-500);margin-bottom:12px;">Un compte de direction (DG / PCA) sera cree automatiquement avec un mot de passe temporaire ; il creera ensuite le compte du Directeur des etudes.</p>
+                    <div class="form-group"><label>Nom du DG / PCA</label><input type="text" class="form-control" name="admin_name" placeholder="Responsable decisionnaire de l'ecole"></div>
+                    <div class="form-group"><label>Fonction</label><select class="form-control" name="admin_title"><option>Directeur General</option><option>President du Conseil d'Administration</option><option>Fondateur</option></select></div>
+                    <div class="form-group"><label>Email du DG / PCA</label><input type="email" class="form-control" name="admin_email" placeholder="Laisser vide pour reutiliser l'email de contact"></div>
                 </div>
             </div>
             <div class="modal-footer">

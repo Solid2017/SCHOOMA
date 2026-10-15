@@ -477,6 +477,24 @@ function lmdJuryPresident(PDO $db, int $clientId, int $classId, int $academicYea
     return $name ?: null;
 }
 
+/** Validation de la deliberation par la Direction generale : ['validated_at', 'name', 'job_title'] ou null */
+function lmdJuryValidation(PDO $db, int $clientId, int $classId, int $academicYearId): ?array
+{
+    $stmt = $db->prepare('SELECT j.validated_at, u.name, u.job_title FROM juries j LEFT JOIN users u ON u.id = j.validated_by
+                          WHERE j.client_id = ? AND j.class_id = ? AND j.academic_year_id = ? AND j.validated_at IS NOT NULL
+                          ORDER BY j.validated_at DESC LIMIT 1');
+    $stmt->execute([$clientId, $classId, $academicYearId]);
+    return $stmt->fetch() ?: null;
+}
+
+/** Responsable d'une ecole pour un role donne (ex : Directeur des etudes signataire des releves) */
+function lmdSchoolOfficial(PDO $db, int $clientId, string $role): ?array
+{
+    $stmt = $db->prepare('SELECT name, job_title FROM users WHERE client_id = ? AND role = ? AND status = "actif" ORDER BY id LIMIT 1');
+    $stmt->execute([$clientId, $role]);
+    return $stmt->fetch() ?: null;
+}
+
 /** Annee universitaire de l'inscription d'un etudiant (la plus recente par defaut) */
 function lmdStudentRegistration(PDO $db, int $clientId, int $studentId, ?int $academicYearId = null): ?array
 {

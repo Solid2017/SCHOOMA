@@ -57,7 +57,11 @@ $schools = [
         'file' => 'seed_shimt.sql',
         'title' => "l'institut SHIMT",
         'client' => ['SHIMT', 'shimt', 'contact@shimt-institute.com', '+235 60 00 00 00', "Quartier Moursal, N'Djamena, Tchad", "N'Djamena"],
-        'admin' => ['Administrateur SHIMT', 'admin@shimt-institute.com', 'Shimt@2026'],
+        // [nom, email, mot de passe, role, fonction] : DG / PCA (decisionnel) et Directeur des etudes (academique)
+        'users' => [
+            ['Direction Generale SHIMT', 'admin@shimt-institute.com', 'Shimt@2026', 'admin_ecole', 'Directeur General'],
+            ['Direction des etudes SHIMT', 'de@shimt-institute.com', 'DeShimt@2026', 'directeur_etudes', 'Directeur des etudes'],
+        ],
         'prefix' => 'SHIMT', 'teacher_domain' => 'shimt-institute.com', 'student_domain' => 'shimt-etudiant.com',
         'students_per_class' => 4,
         'teachers' => [
@@ -151,7 +155,10 @@ $schools = [
         'file' => 'seed_iisan.sql',
         'title' => "l'IISAN N'Djamena (Institut International des Sciences et des Arts du Numérique)",
         'client' => ["IISAN N'Djamena", 'iisan-ndjamena', 'contact@iisan.td', '+235 66 65 66 34', 'Avenue Pascal Yoadimnadji, Chagoua, Tchad', "N'Djamena"],
-        'admin' => ['Administrateur IISAN', 'admin@iisan.td', 'Iisan@2026'],
+        'users' => [
+            ['Direction Generale IISAN', 'admin@iisan.td', 'Iisan@2026', 'admin_ecole', 'Directeur General'],
+            ['Direction des etudes IISAN', 'de@iisan.td', 'DeIisan@2026', 'directeur_etudes', 'Directeur des etudes'],
+        ],
         'prefix' => 'IISAN', 'teacher_domain' => 'iisan.td', 'student_domain' => 'iisan-etudiant.td',
         'students_per_class' => 4,
         'teachers' => [
@@ -228,11 +235,10 @@ const EVAL_DATES = [1 => ['2025-12-15', '2026-02-05', '2026-03-02'], 2 => ['2026
 foreach ($schools as $key => $school) {
     mt_srand(crc32($key));
     [$cName, $cSlug, $cEmail, $cPhone, $cAddress, $cCity] = $school['client'];
-    [$aName, $aEmail, $aPassword] = $school['admin'];
     $out = [];
     $out[] = '-- ============================================================================';
     $out[] = "-- SCHOOMA - Donnees de demonstration LMD pour {$school['title']}";
-    $out[] = '-- Genere par database/generate_seeds.php. Prerequis : database.sql (ou migration 001_lmd.sql).';
+    $out[] = '-- Genere par database/generate_seeds.php. Prerequis : database.sql (ou migrations 001_lmd.sql + 002_roles.sql).';
     $out[] = '-- ATTENTION : supprime puis recree l\'etablissement "' . $cSlug . '" et TOUTES ses donnees.';
     $out[] = '-- ============================================================================';
     $out[] = '';
@@ -240,15 +246,18 @@ foreach ($schools as $key => $school) {
     $out[] = 'START TRANSACTION;';
     $out[] = '';
     $out[] = 'DELETE FROM clients WHERE slug = ' . q($cSlug) . ';';
-    $out[] = 'DELETE FROM users WHERE email = ' . q($aEmail) . ';';
+    $out[] = 'DELETE FROM users WHERE email IN (' . implode(', ', array_map(static fn($u) => q($u[1]), $school['users'])) . ');';
     $out[] = '';
     $out[] = 'INSERT INTO clients (name, slug, email, phone, address, city, plan_id, status) VALUES ('
         . implode(', ', array_map('q', [$cName, $cSlug, $cEmail, $cPhone, $cAddress, $cCity])) . ", (SELECT id FROM subscription_plans WHERE slug = 'pro'), 'actif');";
     $out[] = 'SET @client_id = LAST_INSERT_ID();';
     $out[] = "INSERT INTO academic_years (client_id, label, start_date, end_date, is_current) VALUES (@client_id, '2025-2026', '2025-10-01', '2026-07-31', 1);";
     $out[] = 'SET @ay_id = LAST_INSERT_ID();';
-    $out[] = "-- Compte administrateur : $aEmail / $aPassword (a changer des la premiere connexion)";
-    $out[] = 'INSERT INTO users (client_id, name, email, password_hash, role, status) VALUES (@client_id, ' . q($aName) . ', ' . q($aEmail) . ', ' . q(password_hash($aPassword, PASSWORD_BCRYPT)) . ", 'admin_ecole', 'actif');";
+    foreach ($school['users'] as [$uName, $uEmail, $uPassword, $uRole, $uTitle]) {
+        $out[] = "-- Compte $uTitle : $uEmail / $uPassword (a changer des la premiere connexion)";
+        $out[] = 'INSERT INTO users (client_id, name, email, password_hash, role, job_title, status) VALUES (@client_id, '
+            . implode(', ', array_map('q', [$uName, $uEmail, password_hash($uPassword, PASSWORD_BCRYPT), $uRole, $uTitle])) . ", 'actif');";
+    }
     $out[] = '';
 
     // Enseignants

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/auth.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]);
+requireRole([ROLE_SUPER_ADMIN, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT]);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 $pageTitle = 'Emploi du temps';

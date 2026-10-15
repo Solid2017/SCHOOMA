@@ -5,7 +5,7 @@
  */
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../includes/lmd_view.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_SCHOOL_HEADS);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 
@@ -37,6 +37,8 @@ if ($targets || !empty($classReg)) {
     $academicYearId = (int) ($targets ? reset($targets)['academic_year_id'] : $classReg['academic_year_id']);
     $classData = lmdComputeClass($db, $workingClientId, $classId, $academicYearId);
     $president = lmdJuryPresident($db, $workingClientId, $classId, $academicYearId);
+    $director = lmdSchoolOfficial($db, $workingClientId, ROLE_DIRECTEUR_ETUDES);
+    $validation = lmdJuryValidation($db, $workingClientId, $classId, $academicYearId);
     $rows = $targets ? array_intersect_key($classData['rows'], $targets) : $classData['rows'];
     foreach ($rows as $sid => $row) {
         $docs[] = lmdTranscriptHtml([
@@ -50,6 +52,8 @@ if ($targets || !empty($classReg)) {
             'effectif' => $classData['stats']['effectif'],
             'semesters' => $semester > 0 ? [$semester] : null,
             'president' => $president,
+            'director' => $director,
+            'validation' => $validation,
         ]);
     }
 }

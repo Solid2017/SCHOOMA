@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/auth.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_DIRECTION);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 $pageTitle = 'Paiements enseignants';

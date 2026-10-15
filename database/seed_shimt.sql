@@ -1,6 +1,6 @@
 -- ============================================================================
 -- SCHOOMA - Donnees de demonstration LMD pour l'institut SHIMT
--- Genere par database/generate_seeds.php. Prerequis : database.sql (ou migration 001_lmd.sql).
+-- Genere par database/generate_seeds.php. Prerequis : database.sql (ou migrations 001_lmd.sql + 002_roles.sql).
 -- ATTENTION : supprime puis recree l'etablissement "shimt" et TOUTES ses donnees.
 -- ============================================================================
 
@@ -8,14 +8,16 @@ SET NAMES utf8mb4;
 START TRANSACTION;
 
 DELETE FROM clients WHERE slug = 'shimt';
-DELETE FROM users WHERE email = 'admin@shimt-institute.com';
+DELETE FROM users WHERE email IN ('admin@shimt-institute.com', 'de@shimt-institute.com');
 
 INSERT INTO clients (name, slug, email, phone, address, city, plan_id, status) VALUES ('SHIMT', 'shimt', 'contact@shimt-institute.com', '+235 60 00 00 00', 'Quartier Moursal, N''Djamena, Tchad', 'N''Djamena', (SELECT id FROM subscription_plans WHERE slug = 'pro'), 'actif');
 SET @client_id = LAST_INSERT_ID();
 INSERT INTO academic_years (client_id, label, start_date, end_date, is_current) VALUES (@client_id, '2025-2026', '2025-10-01', '2026-07-31', 1);
 SET @ay_id = LAST_INSERT_ID();
--- Compte administrateur : admin@shimt-institute.com / Shimt@2026 (a changer des la premiere connexion)
-INSERT INTO users (client_id, name, email, password_hash, role, status) VALUES (@client_id, 'Administrateur SHIMT', 'admin@shimt-institute.com', '$2y$10$OtL1yd0jmP9H5WgWeKZ.j.8hqxymtqpbJTNscdll.hVKjP6wjRLH2', 'admin_ecole', 'actif');
+-- Compte Directeur General : admin@shimt-institute.com / Shimt@2026 (a changer des la premiere connexion)
+INSERT INTO users (client_id, name, email, password_hash, role, job_title, status) VALUES (@client_id, 'Direction Generale SHIMT', 'admin@shimt-institute.com', '$2y$10$1XCSIJmoGTj9.T2AbP4pPeawsRttKoxZqSWKaV3uKQjQ69G.VOSKK', 'admin_ecole', 'Directeur General', 'actif');
+-- Compte Directeur des etudes : de@shimt-institute.com / DeShimt@2026 (a changer des la premiere connexion)
+INSERT INTO users (client_id, name, email, password_hash, role, job_title, status) VALUES (@client_id, 'Direction des etudes SHIMT', 'de@shimt-institute.com', '$2y$10$nH5qPDl1ceiM39LNOBZMbeHZMOsue9SH6KFtnZQ9GlDhkkjJ7l1Ga', 'directeur_etudes', 'Directeur des etudes', 'actif');
 
 -- ---- Enseignants ----
 INSERT INTO teachers (client_id, matricule, first_name, last_name, email, phone, specialty, hourly_rate, status) VALUES (@client_id, 'ENS-SHIMT-001', 'Mahamat', 'Hissein', 'mahamat.hissein@shimt-institute.com', '+235 66 16 23 31', 'Gestion et management', 7000, 'actif');

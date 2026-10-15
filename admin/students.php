@@ -1,10 +1,13 @@
 <?php
 require_once __DIR__ . '/auth.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]);
+requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_DIRECTEUR_ETUDES, ROLE_ASSISTANT]);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 $pageTitle = 'Etudiants & Inscriptions';
 $breadcrumb = 'Scolarite / Etudiants';
+// Les montants de scolarite relevent de la Direction generale et de la scolarite (encaissements),
+// pas du Directeur des etudes : il inscrit les etudiants au tarif fixe pour la filiere.
+$canSeeFinance = hasRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? null)) {
@@ -18,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $matricule = sanitize($_POST['matricule'] ?? '');
         $firstName = sanitize($_POST['first_name'] ?? '');
         $lastName = sanitize($_POST['last_name'] ?? '');
-        $dob = $_POST['dob'] ?: null;
+        $dob = ($_POST['dob'] ?? '') ?: null;
         $gender = in_array($_POST['gender'] ?? '', ['M', 'F'], true) ? $_POST['gender'] : null;
         $phone = sanitize($_POST['phone'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
@@ -32,12 +35,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('students.php?client_id=' . $workingClientId);
         }
 
-        $classStmt = $db->prepare('SELECT academic_year_id FROM classes WHERE id = ? AND client_id = ?');
+        $classStmt = $db->prepare('SELECT academic_year_id, tuition_amount FROM classes WHERE id = ? AND client_id = ?');
         $classStmt->execute([$classId, $workingClientId]);
         $class = $classStmt->fetch();
         if (!$class) {
             setFlash('error', 'Filiere invalide.');
             redirect('students.php?client_id=' . $workingClientId);
+        }
+        if (!$canSeeFinance) {
+            $amountTotal = (float) $class['tuition_amount'];
         }
 
         try {
@@ -51,7 +57,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $regStmt->execute([$studentId, $class['academic_year_id']]);
                 $reg = $regStmt->fetch();
                 if ($reg) {
-                    $db->prepare('UPDATE registrations SET class_id=?, amount_total=? WHERE id=?')->execute([$classId, $amountTotal, $reg['id']]);
+                    if ($canSeeFinance) {
+                        $db->prepare('UPDATE registrations SET class_id=?, amount_total=? WHERE id=?')->execute([$classId, $amountTotal, $reg['id']]);
+                    } else {
+                        $db->prepare('UPDATE registrations SET class_id=? WHERE id=?')->execute([$classId, $reg['id']]);
+                    }
                 } else {
                     $db->prepare('INSERT INTO registrations (client_id, student_id, class_id, academic_year_id, registration_date, amount_total) VALUES (?,?,?,?,?,?)')
                        ->execute([$workingClientId, $studentId, $classId, $class['academic_year_id'], date('Y-m-d'), $amountTotal]);
@@ -71,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->rollBack();
             setFlash('error', 'Ce matricule existe deja pour cette ecole.');
         }
-    } elseif ($action === 'delete') {
+    } elseif ($action === 'delete' && $canSeeFinance) {
         $id = (int) ($_POST['id'] ?? 0);
         $stmt = $db->prepare('DELETE FROM students WHERE id = ? AND client_id = ?');
         $stmt->execute([$id, $workingClientId]);
@@ -112,8 +122,15 @@ if (($_GET['export'] ?? '') === 'csv') {
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
-    $csvRows = array_map(fn($s) => [$s['matricule'], $s['first_name'], $s['last_name'], $s['class_name'] ?? '-', $s['status'], $s['phone'], $s['email'], $s['amount_total'] ?? 0, $s['amount_paid'] ?? 0], $rows);
-    exportCsv('etudiants.csv', ['Matricule', 'Prenom', 'Nom', 'Filiere', 'Statut', 'Telephone', 'Email', 'Montant du', 'Montant paye'], $csvRows);
+    $headers = ['Matricule', 'Prenom', 'Nom', 'Filiere', 'Statut', 'Telephone', 'Email'];
+    $csvRows = array_map(fn($s) => [$s['matricule'], $s['first_name'], $s['last_name'], $s['class_name'] ?? '-', $s['status'], $s['phone'], $s['email']], $rows);
+    if ($canSeeFinance) {
+        array_push($headers, 'Montant du', 'Montant paye');
+        foreach ($rows as $i => $row) {
+            array_push($csvRows[$i], $row['amount_total'] ?? 0, $row['amount_paid'] ?? 0);
+        }
+    }
+    exportCsv('etudiants.csv', $headers, $csvRows);
 }
 
 $stmt = $db->prepare($sql);
@@ -158,18 +175,19 @@ require_once __DIR__ . '/inc_header.php';
 
     <div class="table-responsive">
         <table class="data-table">
-            <thead><tr><th>Matricule</th><th>Etudiant</th><th>Filiere</th><th>Annee</th><th>Scolarite</th><th>Statut</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Matricule</th><th>Etudiant</th><th>Filiere</th><th>Annee</th><?php if ($canSeeFinance): ?><th>Scolarite</th><?php endif; ?><th>Statut</th><th>Actions</th></tr></thead>
             <tbody>
-            <?php foreach ($students as $s): ?>
+            <?php foreach ($students as $s): if (!$canSeeFinance) { unset($s['amount_total'], $s['amount_paid']); } ?>
                 <tr>
                     <td><?= sanitize($s['matricule']) ?></td>
                     <td><strong><?= sanitize($s['first_name'] . ' ' . $s['last_name']) ?></strong></td>
                     <td><?= sanitize($s['class_name'] ?? '-') ?></td>
                     <td><?= sanitize($s['year_label'] ?? '-') ?></td>
-                    <td><?= formatMoney($s['amount_paid'] ?? 0) ?> / <?= formatMoney($s['amount_total'] ?? 0) ?></td>
+                    <?php if ($canSeeFinance): ?><td><?= formatMoney($s['amount_paid'] ?? 0) ?> / <?= formatMoney($s['amount_total'] ?? 0) ?></td><?php endif; ?>
                     <td><span class="badge badge-<?= $s['status'] === 'actif' ? 'success' : ($s['status'] === 'diplome' ? 'info' : 'gray') ?>"><?= sanitize($s['status']) ?></span></td>
                     <td class="action-icons">
                         <button class="edit" title="Modifier" onclick='editStudent(<?= json_encode($s, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'><i class="fa-solid fa-pen"></i></button>
+                        <?php if ($canSeeFinance): ?>
                         <a class="view" title="Paiements" href="payments.php?client_id=<?= $workingClientId ?>&student_id=<?= (int) $s['id'] ?>"><i class="fa-solid fa-money-bill"></i></a>
                         <form method="post" style="display:inline;" onsubmit="return confirm('Supprimer cet etudiant et toutes ses donnees associees ?');">
                             <?= csrfField() ?>
@@ -177,10 +195,11 @@ require_once __DIR__ . '/inc_header.php';
                             <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
                             <button type="submit" class="delete" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
                         </form>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (empty($students)): ?><tr><td colspan="7" class="text-center">Aucun etudiant trouve.</td></tr><?php endif; ?>
+            <?php if (empty($students)): ?><tr><td colspan="<?= $canSeeFinance ? 7 : 6 ?>" class="text-center">Aucun etudiant trouve.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -224,10 +243,14 @@ require_once __DIR__ . '/inc_header.php';
                     <div class="form-group"><label>Filiere (inscription) *</label>
                         <select class="form-control" name="class_id" id="student_class_id" required onchange="autoFillTuition()">
                             <option value="">-- Choisir --</option>
-                            <?php foreach ($classesList as $c): ?><option value="<?= (int) $c['id'] ?>" data-tuition="<?= (float) $c['tuition_amount'] ?>"><?= sanitize($c['name']) ?></option><?php endforeach; ?>
+                            <?php foreach ($classesList as $c): ?><option value="<?= (int) $c['id'] ?>" data-tuition="<?= $canSeeFinance ? (float) $c['tuition_amount'] : '' ?>"><?= sanitize($c['name']) ?></option><?php endforeach; ?>
                         </select>
                     </div>
+                    <?php if ($canSeeFinance): ?>
                     <div class="form-group"><label>Montant total scolarite (FCFA)</label><input type="number" step="0.01" min="0" class="form-control" name="amount_total" id="student_amount_total"></div>
+                    <?php else: ?>
+                    <div class="form-group"><label>Frais de scolarite</label><p style="font-size:.85rem;color:var(--gray-500);margin:8px 0 0;">Tarif fixé par la Direction générale pour la filière.</p><input type="hidden" id="student_amount_total"></div>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="modal-footer">

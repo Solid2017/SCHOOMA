@@ -529,3 +529,7 @@ table.data-table tbody tr:hover { background: var(--primary-lighter); }
     .lmd-table tr, .lmd-summary, .lmd-signatures, .pv-stats { break-inside: avoid; page-break-inside: avoid; }
     .lmd-sem-title, .lmd-table th, .lmd-summary th, .lmd-ue td, .lmd-identity th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+.pv-approval { margin: 10px 0 0 auto; width: 260px; text-align: center; min-height: 70px; }
+.pv-approval span { display: block; font-style: italic; font-size: 11px; }
+.pv-approval strong { display: block; text-decoration: underline; }
+.pv-approval small { display: block; margin-top: 34px; color: var(--gray-500); }

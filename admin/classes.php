@@ -1,10 +1,12 @@
 <?php
 require_once __DIR__ . '/auth.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_SCHOOL_HEADS);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 $pageTitle = 'Filieres / Classes';
 $breadcrumb = 'Structure academique / Filieres';
+// Les frais de scolarite sont une decision de la Direction generale (DG / PCA)
+$canSetFees = hasRole(ROLES_DIRECTION);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? null)) {
@@ -24,16 +26,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             setFlash('error', 'Nom et annee universitaire requis.');
         } else {
             if ($id > 0) {
-                $stmt = $db->prepare('UPDATE classes SET name=?, level=?, academic_year_id=?, tuition_amount=? WHERE id=? AND client_id=?');
-                $stmt->execute([$name, $level, $ayId, $tuition, $id, $workingClientId]);
+                if ($canSetFees) {
+                    $stmt = $db->prepare('UPDATE classes SET name=?, level=?, academic_year_id=?, tuition_amount=? WHERE id=? AND client_id=?');
+                    $stmt->execute([$name, $level, $ayId, $tuition, $id, $workingClientId]);
+                } else {
+                    $stmt = $db->prepare('UPDATE classes SET name=?, level=?, academic_year_id=? WHERE id=? AND client_id=?');
+                    $stmt->execute([$name, $level, $ayId, $id, $workingClientId]);
+                }
                 setFlash('success', 'Filiere mise a jour.');
             } else {
                 $stmt = $db->prepare('INSERT INTO classes (client_id, academic_year_id, name, level, tuition_amount) VALUES (?,?,?,?,?)');
-                $stmt->execute([$workingClientId, $ayId, $name, $level, $tuition]);
-                setFlash('success', 'Filiere creee.');
+                $stmt->execute([$workingClientId, $ayId, $name, $level, $canSetFees ? $tuition : 0]);
+                setFlash('success', $canSetFees ? 'Filiere creee.' : 'Filiere creee. Les frais de scolarite seront fixes par la Direction generale.');
             }
         }
-    } elseif ($action === 'delete') {
+    } elseif ($action === 'delete' && $canSetFees) {
         $id = (int) ($_POST['id'] ?? 0);
         $stmt = $db->prepare('DELETE FROM classes WHERE id = ? AND client_id = ?');
         $stmt->execute([$id, $workingClientId]);
@@ -71,27 +78,29 @@ require_once __DIR__ . '/inc_header.php';
 <div class="admin-card">
     <div class="table-responsive">
         <table class="data-table">
-            <thead><tr><th>Filiere</th><th>Niveau</th><th>Annee</th><th>Frais de scolarite</th><th>Etudiants</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Filiere</th><th>Niveau</th><th>Annee</th><?php if ($canSetFees): ?><th>Frais de scolarite</th><?php endif; ?><th>Etudiants</th><th>Actions</th></tr></thead>
             <tbody>
-            <?php foreach ($classes as $c): ?>
+            <?php foreach ($classes as $c): if (!$canSetFees) { unset($c['tuition_amount']); } ?>
                 <tr>
                     <td><strong><?= sanitize($c['name']) ?></strong></td>
                     <td><?= sanitize($c['level'] ?? '-') ?></td>
                     <td><?= sanitize($c['year_label']) ?></td>
-                    <td><?= formatMoney($c['tuition_amount']) ?></td>
+                    <?php if ($canSetFees): ?><td><?= formatMoney($c['tuition_amount']) ?></td><?php endif; ?>
                     <td><?= (int) $c['students_count'] ?></td>
                     <td class="action-icons">
                         <button class="edit" title="Modifier" onclick='editClass(<?= json_encode($c, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'><i class="fa-solid fa-pen"></i></button>
+                        <?php if ($canSetFees): ?>
                         <form method="post" style="display:inline;" onsubmit="return confirm('Supprimer cette filiere ?');">
                             <?= csrfField() ?>
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
                             <button type="submit" class="delete" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
                         </form>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (empty($classes)): ?><tr><td colspan="6" class="text-center">Aucune filiere enregistree.</td></tr><?php endif; ?>
+            <?php if (empty($classes)): ?><tr><td colspan="<?= $canSetFees ? 6 : 5 ?>" class="text-center">Aucune filiere enregistree.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -112,7 +121,9 @@ require_once __DIR__ . '/inc_header.php';
                         <?php foreach ($years as $y): ?><option value="<?= (int) $y['id'] ?>"><?= sanitize($y['label']) ?></option><?php endforeach; ?>
                     </select>
                 </div>
+                <?php if ($canSetFees): ?>
                 <div class="form-group"><label>Frais de scolarite (FCFA)</label><input type="number" step="0.01" min="0" class="form-control" name="tuition_amount" id="class_tuition" value="0"></div>
+                <?php else: ?><input type="hidden" id="class_tuition"><?php endif; ?>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline" data-modal-close>Annuler</button>
@@ -136,7 +147,7 @@ function editClass(c) {
     document.getElementById('class_name').value = c.name;
     document.getElementById('class_level').value = c.level || '';
     document.getElementById('class_year').value = c.academic_year_id;
-    document.getElementById('class_tuition').value = c.tuition_amount;
+    document.getElementById('class_tuition').value = c.tuition_amount || 0;
     document.getElementById('classModal').classList.add('open');
 }
 </script>

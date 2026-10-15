@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../includes/lmd.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_ACADEMIC);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 $pageTitle = 'Matieres (ECUE)';

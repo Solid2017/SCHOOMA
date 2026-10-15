@@ -5,9 +5,15 @@
  */
 require_once __DIR__ . '/../includes/config.php';
 
-const ROLE_SUPER_ADMIN = 'super_admin';
-const ROLE_ADMIN_ECOLE = 'admin_ecole';
-const ROLE_ASSISTANT   = 'assistant';
+const ROLE_SUPER_ADMIN      = 'super_admin';
+const ROLE_ADMIN_ECOLE      = 'admin_ecole';      // Directeur General / PCA : aspects decisionnels
+const ROLE_DIRECTEUR_ETUDES = 'directeur_etudes'; // Directeur des etudes : aspects academiques
+const ROLE_ASSISTANT        = 'assistant';
+
+// Groupes de roles utilises pour les controles d'acces
+const ROLES_DIRECTION = [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE];                        // decisions, finances, publication
+const ROLES_ACADEMIC  = [ROLE_SUPER_ADMIN, ROLE_DIRECTEUR_ETUDES];                   // maquettes, notes, deliberations
+const ROLES_SCHOOL_HEADS = [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_DIRECTEUR_ETUDES]; // consultation commune
 
 /** Utilisateur actuellement connecte (ou null) */
 function currentUser(): ?array
@@ -33,6 +39,13 @@ function requireRole(array $roles): void
         http_response_code(403);
         die('<div style="font-family:sans-serif;padding:60px;text-align:center;"><h1>Acces refuse</h1><p>Vous n\'avez pas les droits necessaires pour acceder a cette page.</p><a href="' . ADMIN_URL . '/index.php">Retour au tableau de bord</a></div>');
     }
+}
+
+/** L'utilisateur connecte a-t-il l'un de ces roles ? */
+function hasRole(array $roles): bool
+{
+    $user = currentUser();
+    return $user !== null && in_array($user['role'], $roles, true);
 }
 
 function isSuperAdmin(): bool
@@ -62,6 +75,7 @@ function loginUser(array $user): void
         'name'      => $user['name'],
         'email'     => $user['email'],
         'role'      => $user['role'],
+        'job_title' => $user['job_title'] ?? null,
         'client_id' => $user['client_id'] !== null ? (int) $user['client_id'] : null,
         'photo'     => $user['photo'],
     ];
@@ -78,16 +92,29 @@ function logoutUser(): void
 function roleLabel(string $role): string
 {
     return match ($role) {
-        ROLE_SUPER_ADMIN => 'Super Administrateur',
-        ROLE_ADMIN_ECOLE => 'Administrateur Ecole',
-        ROLE_ASSISTANT   => 'Assistant',
-        default          => ucfirst($role),
+        ROLE_SUPER_ADMIN      => 'Super Administrateur',
+        ROLE_ADMIN_ECOLE      => 'Directeur General / PCA',
+        ROLE_DIRECTEUR_ETUDES => 'Directeur des etudes',
+        ROLE_ASSISTANT        => 'Assistant',
+        default               => ucfirst($role),
+    };
+}
+
+/** Description courte des attributions d'un role (formulaire utilisateurs) */
+function roleDescription(string $role): string
+{
+    return match ($role) {
+        ROLE_SUPER_ADMIN      => 'Plateforme SaaS : ecoles clientes, abonnements, facturation, acces a toutes les ecoles.',
+        ROLE_ADMIN_ECOLE      => 'Decisionnel : finances, frais de scolarite, remuneration des enseignants, utilisateurs, communication, validation et publication des resultats.',
+        ROLE_DIRECTEUR_ETUDES => 'Academique : filieres, UE et matieres, emploi du temps, notes, resultats, jurys de deliberation et releves.',
+        ROLE_ASSISTANT        => 'Scolarite : inscriptions, encaissement des paiements, emploi du temps, saisie des notes.',
+        default               => '',
     };
 }
 
 /**
  * Determine le client (ecole) sur lequel travailler pour les modules
- * academiques/pedagogiques. Pour un admin_ecole/assistant : toujours leur
+ * academiques/pedagogiques. Pour un utilisateur d'ecole : toujours leur
  * propre ecole. Pour un super_admin : l'ecole choisie via ?client_id=, ou la
  * premiere ecole disponible par defaut (le super-admin peut ainsi consulter
  * et gerer les donnees de n'importe quelle ecole cliente).

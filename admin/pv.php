@@ -2,13 +2,16 @@
 /** Proces-verbal de deliberation imprimable (A4 paysage) */
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../includes/lmd_view.php';
-requireRole([ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]);
+requireRole(ROLES_SCHOOL_HEADS);
 $db = getDB();
 $workingClientId = resolveWorkingClientId();
 
 $juryId = (int) ($_GET['jury_id'] ?? 0);
-$stmt = $db->prepare('SELECT j.*, c.name AS class_name, c.level AS class_level, ay.label AS year_label FROM juries j
+$stmt = $db->prepare('SELECT j.*, c.name AS class_name, c.level AS class_level, ay.label AS year_label,
+                             u.name AS validator_name, u.job_title AS validator_title
+                      FROM juries j
                       JOIN classes c ON c.id = j.class_id JOIN academic_years ay ON ay.id = j.academic_year_id
+                      LEFT JOIN users u ON u.id = j.validated_by
                       WHERE j.id = ? AND j.client_id = ?');
 $stmt->execute([$juryId, $workingClientId]);
 $jury = $stmt->fetch();
@@ -32,6 +35,12 @@ $data = lmdComputeClass($db, $workingClientId, (int) $jury['class_id'], (int) $j
 $semesterNumbers = array_keys($data['curriculum']);
 $st = $data['stats'];
 $closed = $jury['status'] === 'cloture';
+$validated = $jury['validated_at'] !== null;
+// Signataire du visa : le DG / PCA ayant valide, sinon le premier compte de direction de l'ecole
+$approver = $validated && $jury['validator_name']
+    ? ['name' => $jury['validator_name'], 'job_title' => $jury['validator_title']]
+    : lmdSchoolOfficial($db, $workingClientId, ROLE_ADMIN_ECOLE);
+$approverTitle = $approver['job_title'] ?? '' ?: 'Le Directeur Général / PCA';
 $sessionLabel = $jury['session_type'] === 'rattrapage' ? 'Session de rattrapage' : 'Session normale';
 $dateLabel = $jury['session_date'] ? formatDate($jury['session_date']) : '……/……/…………';
 $city = $school['city'] ?? '';
@@ -53,13 +62,14 @@ $city = $school['city'] ?? '';
 <body class="print-page">
 <div class="print-toolbar">
     <a href="<?= ADMIN_URL ?>/jury.php?client_id=<?= $workingClientId ?>&id=<?= $juryId ?>" class="btn btn-outline btn-sm" style="color:#fff;border-color:rgba(255,255,255,.5)">&larr; Retour au jury</a>
-    <span style="font-size:.85rem;"><?= $closed ? 'Délibération clôturée' : 'Projet : délibération non clôturée' ?></span>
+    <span style="font-size:.85rem;"><?= $validated ? 'Délibération validée par la Direction générale' : ($closed ? 'Délibération clôturée, en attente de validation' : 'Projet : délibération non clôturée') ?></span>
     <button type="button" class="btn btn-accent btn-sm" onclick="window.print()">Imprimer</button>
 </div>
 
 <article class="lmd-doc landscape">
     <?= lmdSchoolHeaderHtml($school, 'Procès-verbal de délibération', ['Année universitaire ' . $jury['year_label'], $sessionLabel]) ?>
-    <?php if (!$closed): ?><div class="pv-draft">PROJET — DÉLIBÉRATION NON CLÔTURÉE</div><?php endif; ?>
+    <?php if (!$closed): ?><div class="pv-draft">PROJET — DÉLIBÉRATION NON CLÔTURÉE</div>
+    <?php elseif (!$validated): ?><div class="pv-draft">EN ATTENTE DE VALIDATION PAR LA DIRECTION GÉNÉRALE</div><?php endif; ?>
 
     <p class="pv-text">
         Le <?= e($dateLabel) ?><?= $jury['location'] ? ', en ' . e($jury['location']) : '' ?>, le jury de délibération de la filière
@@ -129,7 +139,12 @@ $city = $school['city'] ?? '';
                 <div><span><?= e(LMD_JURY_ROLES[$m['role']] ?? $m['role']) ?></span><small><?= e($memberName($m)) ?></small><em>&nbsp;</em></div>
             <?php endforeach; ?>
         </div>
-        <p class="lmd-disclaimer">Procès-verbal généré par <?= e(SITE_NAME) ?> — <?= e($school['name']) ?><?= $closed ? ' — délibération clôturée le ' . e(formatDate($jury['deliberated_at'], 'd/m/Y à H:i')) : '' ?>.</p>
+        <div class="pv-approval">
+            <span>Vu et approuvé<?= $validated ? ' le ' . e(formatDate($jury['validated_at'])) : '' ?></span>
+            <strong><?= e($approverTitle) ?></strong>
+            <small><?= e($approver['name'] ?? '') ?></small>
+        </div>
+        <p class="lmd-disclaimer">Procès-verbal généré par <?= e(SITE_NAME) ?> — <?= e($school['name']) ?><?= $closed ? ' — délibération clôturée le ' . e(formatDate($jury['deliberated_at'], 'd/m/Y à H:i')) : '' ?><?= $validated ? ' — validée et publiée par la Direction générale le ' . e(formatDate($jury['validated_at'], 'd/m/Y à H:i')) : '' ?>.</p>
     </footer>
 </article>
 </body>
