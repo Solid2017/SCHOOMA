@@ -11,6 +11,18 @@ function sanitize(?string $value): string
     return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
 }
 
+/** Echappe une valeur pour l'affichage HTML (sans la modifier) */
+function e($value): string
+{
+    return htmlspecialchars((string) ($value ?? ''), ENT_QUOTES, 'UTF-8');
+}
+
+/** Texte saisi dans un formulaire, a stocker tel quel (l'echappement se fait a l'affichage avec e()) */
+function inputText(?string $value, int $maxLength = 255): string
+{
+    return mb_substr(trim(strip_tags($value ?? '')), 0, $maxLength);
+}
+
 /** Nettoie un tableau de donnees ($_POST par exemple) */
 function sanitizeArray(array $data): array
 {
