@@ -18,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = sanitize($_POST['email'] ?? '');
         $phone = sanitize($_POST['phone'] ?? '');
         $address = sanitize($_POST['address'] ?? '');
+        $city = inputText($_POST['city'] ?? '', 100) ?: null;
         $planId = (int) ($_POST['plan_id'] ?? 0) ?: null;
         $status = in_array($_POST['status'] ?? '', ['actif', 'suspendu', 'essai', 'resilie'], true) ? $_POST['status'] : 'essai';
 
@@ -27,13 +28,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($id > 0) {
-            $stmt = $db->prepare('UPDATE clients SET name=?, email=?, phone=?, address=?, plan_id=?, status=? WHERE id=?');
-            $stmt->execute([$name, $email, $phone, $address, $planId, $status, $id]);
+            $stmt = $db->prepare('UPDATE clients SET name=?, email=?, phone=?, address=?, city=?, plan_id=?, status=? WHERE id=?');
+            $stmt->execute([$name, $email, $phone, $address, $city, $planId, $status, $id]);
             setFlash('success', 'Ecole mise a jour avec succes.');
         } else {
             $slug = slugify($name) . '-' . substr(md5(uniqid('', true)), 0, 5);
-            $stmt = $db->prepare('INSERT INTO clients (name, slug, email, phone, address, plan_id, status, trial_ends_at) VALUES (?,?,?,?,?,?,?,?)');
-            $stmt->execute([$name, $slug, $email, $phone, $address, $planId, $status, date('Y-m-d', strtotime('+30 days'))]);
+            $stmt = $db->prepare('INSERT INTO clients (name, slug, email, phone, address, city, plan_id, status, trial_ends_at) VALUES (?,?,?,?,?,?,?,?,?)');
+            $stmt->execute([$name, $slug, $email, $phone, $address, $city, $planId, $status, date('Y-m-d', strtotime('+30 days'))]);
             $newClientId = (int) $db->lastInsertId();
 
             // Creation automatique du compte administrateur de l'ecole
@@ -138,6 +139,7 @@ require_once __DIR__ . '/inc_header.php';
                     </div>
                 </div>
                 <div class="form-group"><label>Adresse</label><input type="text" class="form-control" name="address" id="client_address"></div>
+                <div class="form-group"><label>Ville (releves et PV : « Fait a ... »)</label><input type="text" class="form-control" name="city" id="client_city" maxlength="100"></div>
                 <div class="form-group"><label>Statut</label>
                     <select class="form-control" name="status" id="client_status">
                         <option value="essai">Essai</option>
@@ -170,6 +172,7 @@ function resetClientForm() {
     document.getElementById('client_phone').value = '';
     document.getElementById('client_plan_id').value = '';
     document.getElementById('client_address').value = '';
+    document.getElementById('client_city').value = '';
     document.getElementById('client_status').value = 'essai';
     document.getElementById('clientAdminFields').style.display = 'block';
 }
@@ -181,6 +184,7 @@ function editClient(c) {
     document.getElementById('client_phone').value = c.phone || '';
     document.getElementById('client_plan_id').value = c.plan_id || '';
     document.getElementById('client_address').value = c.address || '';
+    document.getElementById('client_city').value = c.city || '';
     document.getElementById('client_status').value = c.status;
     document.getElementById('clientAdminFields').style.display = 'none';
     document.getElementById('clientModal').classList.add('open');

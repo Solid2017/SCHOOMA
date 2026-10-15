@@ -465,6 +465,18 @@ function lmdStoreClassResults(PDO $db, int $clientId, int $classId, int $academi
     return $count;
 }
 
+/** Nom du president du jury de la filiere (jury cloture en priorite) */
+function lmdJuryPresident(PDO $db, int $clientId, int $classId, int $academicYearId): ?string
+{
+    $stmt = $db->prepare("SELECT COALESCE(CONCAT(t.first_name, ' ', t.last_name), jm.full_name) AS name
+                          FROM jury_members jm JOIN juries j ON j.id = jm.jury_id LEFT JOIN teachers t ON t.id = jm.teacher_id
+                          WHERE j.client_id = ? AND j.class_id = ? AND j.academic_year_id = ? AND jm.role = 'president'
+                          ORDER BY j.status = 'cloture' DESC, j.session_date DESC LIMIT 1");
+    $stmt->execute([$clientId, $classId, $academicYearId]);
+    $name = $stmt->fetchColumn();
+    return $name ?: null;
+}
+
 /** Annee universitaire de l'inscription d'un etudiant (la plus recente par defaut) */
 function lmdStudentRegistration(PDO $db, int $clientId, int $studentId, ?int $academicYearId = null): ?array
 {
