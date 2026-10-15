@@ -256,13 +256,13 @@ function lmdComputeStudent(array $curriculum, array $studentGrades, float $juryP
             }
             $semMissing += $ueMissing;
 
-            $units[$ueId] = $ue + [
+            $units[$ueId] = array_merge($ue, [
                 'subjects' => $subjects,
                 'average' => $ueAverage,
                 'missing' => $ueMissing,
                 'status' => 'non_evalue',
                 'acquired' => 0.0,
-            ];
+            ]);
         }
 
         $semAverage = $semHasMarks && $semWeight > 0 ? round($semWeighted / $semWeight, 2) : null;

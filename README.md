@@ -29,19 +29,43 @@ Changez ces mots de passe depuis **Admin > Mon profil** des la premiere connexio
 /
 ├── index.php, a-propos.php, programmes.php, admissions.php, contact.php, blog.php, blog-article.php, resultats.php
 ├── sitemap.php, robots.txt, .htaccess
-├── includes/        config.php (BDD + constantes), functions.php, header.php, footer.php
+├── includes/        config.php (BDD + constantes), functions.php, lmd.php (moteur LMD), lmd_view.php (releves), header.php, footer.php
 ├── admin/           auth.php, login.php, layout (inc_header/inc_footer/inc_sidebar), index.php (dashboard) + un module par entite
 ├── api/             endpoints JSON publics (contact, newsletter, admissions)
 ├── assets/          css/style.css, js/main.js, uploads/
+├── database/        migrations/, seeds par ecole cliente, generateur
 └── database.sql     script d'initialisation complet (schema + donnees de demo)
 ```
 
+## Mise a jour d'une installation existante (systeme LMD)
+
+Une base deja en production (installee avant le module LMD) doit recevoir **une seule fois** la migration :
+
+1. Sauvegardez la base (phpMyAdmin > Exporter).
+2. Importez `database/migrations/001_lmd.sql` (unites d'enseignement, credits, resultats LMD, jurys enrichis).
+3. Deposez les nouveaux fichiers **sans ecraser `includes/config.php`** (il contient vos identifiants de production).
+
+Une installation neuve via `database.sql` contient deja ce schema : ne pas executer la migration.
+
+## Systeme LMD (60 credits par an)
+
+- **Maquette** : chaque filiere est organisee en semestres de 30 credits, eux-memes composes d'unites d'enseignement (UE : fondamentale, methodologique, transversale, decouverte) regroupant des elements constitutifs (ECUE / matieres) dotes de credits et d'un coefficient. Gestion : *Admin > Unites d'enseignement* puis *Matieres (ECUE)*.
+- **Notes** : saisie en grille par matiere (CC, examen, rattrapage). Note ECUE = CC x 40 % + Examen x 60 % ; la note de rattrapage remplace l'examen si elle est plus favorable (marquee `*`).
+- **Validation** : une UE est validee si sa moyenne ponderee >= 10 (V), ou par compensation si la moyenne du semestre >= 10 (VC). Compensation annuelle : moyenne annuelle (+ points de jury) >= 10 => 60 credits acquis.
+- **Decisions** : Admis(e) (60 credits), Admis(e) avec dettes (>= 45 credits), Ajourne(e) ; Redoublement / Exclusion sur decision du jury. Mentions Passable a Tres Bien.
+- **Releves de notes** imprimables (A4) par etudiant ou par filiere, semestriels ou annuels : *Admin > Resultats LMD & releves*. Les etudiants consultent leur releve publie sur `resultats.php` (matricule + date de naissance).
+- **Jurys de deliberation** : *Admin > Jurys de deliberation*. Composition designee (president, vice-president, secretaire, rapporteur, membres enseignants ou personnalites exterieures), saisie des points de jury (max. 1 point) et des decisions, cloture qui publie les resultats, **proces-verbal** imprimable (A4 paysage) signe par les membres.
+- Les seuils (ponderation CC, compensation, credits, points de jury) sont des constantes surchargeables dans `includes/config.php` (voir `includes/lmd.php`).
+
 ## Donnees de test par ecole cliente
 
-Le dossier `database/` contient des scripts de migration additionnels a importer **apres** `database.sql`, pour peupler une ecole cliente specifique avec des donnees de demonstration realistes (filieres, matieres, enseignants, etudiants, inscriptions, paiements, notes).
+Le dossier `database/` contient des scripts a importer **apres** `database.sql` (ou apres la migration) pour peupler une ecole cliente avec des donnees de demonstration realistes. Chaque script **supprime puis recree** l'ecole concernee (et uniquement elle) : il peut etre relance sans doublon, mais toute saisie faite entre-temps sur cette ecole sera perdue.
 
-- `database/seed_shimt.sql` : institut **SHIMT** (10 filieres, 40 etudiants, 12 enseignants, paiements et notes de demo). Compte admin cree automatiquement : `admin@shimt-institute.com` / `Shimt@2026` (a changer des la premiere connexion).
-- `database/seed_iisan.sql` : **IISAN N'Djamena** (Institut International des Sciences et des Arts du Numerique - 5 filieres numeriques, 20 etudiants, 10 enseignants, paiements et notes de demo). Compte admin cree automatiquement : `admin@iisan.td` / `Iisan@2026` (a changer des la premiere connexion). Informations issues d'une recherche web (site officiel iisan.co non accessible depuis l'environnement de generation) : a verifier/corriger aupres de l'etablissement si besoin.
+- `database/seed_shimt.sql` : institut **SHIMT** — 10 filieres de Licence 1 avec maquette LMD complete (120 UE, 220 ECUE, 2 x 30 credits par filiere), 12 enseignants, 40 etudiants, notes CC/examen/rattrapage, paiements, un jury par filiere. Compte admin : `admin@shimt-institute.com` / `Shimt@2026`.
+- `database/seed_iisan.sql` : **IISAN N'Djamena** (Institut International des Sciences et des Arts du Numerique) — 5 filieres numeriques (60 UE, 110 ECUE), 10 enseignants, 20 etudiants, notes, paiements et jurys. Compte admin : `admin@iisan.td` / `Iisan@2026`. Informations institutionnelles a verifier aupres de l'etablissement.
+- `database/generate_seeds.php` : generateur (ligne de commande uniquement) de ces deux scripts : `php database/generate_seeds.php`.
+
+Changez les mots de passe des comptes de demonstration des la premiere connexion.
 
 ## Roles
 
