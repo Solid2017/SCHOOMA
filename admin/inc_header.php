@@ -5,6 +5,7 @@
  */
 $user = currentUser();
 $currentPage = basename($_SERVER['SCRIPT_NAME']);
+$currentPage = ['jury.php' => 'juries.php'][$currentPage] ?? $currentPage;
 $pageTitle = $pageTitle ?? 'Tableau de bord';
 
 $navGroups = [
@@ -19,7 +20,8 @@ $navGroups = [
     'Structure academique' => [
         ['icon' => 'fa-calendar-week', 'label' => 'Annees universitaires', 'href' => 'academic_years.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
         ['icon' => 'fa-sitemap', 'label' => 'Filieres / Classes', 'href' => 'classes.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-book', 'label' => 'Matieres', 'href' => 'subjects.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
+        ['icon' => 'fa-layer-group', 'label' => 'Unites d\'enseignement', 'href' => 'teaching_units.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
+        ['icon' => 'fa-book', 'label' => 'Matieres (ECUE)', 'href' => 'subjects.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
     ],
     'Scolarite' => [
         ['icon' => 'fa-user-graduate', 'label' => 'Etudiants & Inscriptions', 'href' => 'students.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
@@ -32,8 +34,8 @@ $navGroups = [
     'Pedagogie' => [
         ['icon' => 'fa-calendar-days', 'label' => 'Emploi du temps', 'href' => 'schedule.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
         ['icon' => 'fa-marker', 'label' => 'Notes', 'href' => 'grades.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE, ROLE_ASSISTANT]],
-        ['icon' => 'fa-award', 'label' => 'Resultats annuels', 'href' => 'results.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
-        ['icon' => 'fa-users-rectangle', 'label' => 'Jurys', 'href' => 'juries.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
+        ['icon' => 'fa-award', 'label' => 'Resultats LMD & releves', 'href' => 'results.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
+        ['icon' => 'fa-users-rectangle', 'label' => 'Jurys de deliberation', 'href' => 'juries.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],
     ],
     'Site web' => [
         ['icon' => 'fa-envelope-open-text', 'label' => 'Messages', 'href' => 'contacts.php', 'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN_ECOLE]],

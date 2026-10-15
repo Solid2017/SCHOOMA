@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS clients (
     email VARCHAR(150) NOT NULL,
     phone VARCHAR(30) NULL,
     address VARCHAR(255) NULL,
+    city VARCHAR(100) NULL,
     logo VARCHAR(255) NULL,
     plan_id INT UNSIGNED NULL,
     status ENUM('actif','suspendu','essai','resilie') NOT NULL DEFAULT 'essai',
@@ -100,15 +101,37 @@ CREATE TABLE IF NOT EXISTS classes (
     FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Unites d'enseignement (UE) du systeme LMD : 30 credits par semestre, 60 par annee
+CREATE TABLE IF NOT EXISTS teaching_units (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    client_id INT UNSIGNED NOT NULL,
+    class_id INT UNSIGNED NOT NULL,
+    semester TINYINT UNSIGNED NOT NULL, -- numero LMD : 1..6 (Licence), 7..10 (Master)
+    code VARCHAR(20) NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    category ENUM('fondamentale','methodologique','transversale','decouverte') NOT NULL DEFAULT 'fondamentale',
+    credits DECIMAL(4,1) NOT NULL DEFAULT 0,
+    sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    KEY idx_tu_class_semester (class_id, semester)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Matieres = elements constitutifs (ECUE) d'une UE
 CREATE TABLE IF NOT EXISTS subjects (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     client_id INT UNSIGNED NOT NULL,
     class_id INT UNSIGNED NOT NULL,
+    teaching_unit_id INT UNSIGNED NULL,
+    code VARCHAR(20) NULL,
     name VARCHAR(150) NOT NULL,
+    credits DECIMAL(4,1) NULL,
     coefficient DECIMAL(4,2) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
-    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    FOREIGN KEY (teaching_unit_id) REFERENCES teaching_units(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------------------------------------------------------
@@ -282,16 +305,28 @@ CREATE TABLE IF NOT EXISTS results (
     student_id INT UNSIGNED NOT NULL,
     class_id INT UNSIGNED NOT NULL,
     academic_year_id INT UNSIGNED NOT NULL,
-    average DECIMAL(5,2) NOT NULL DEFAULT 0,
+    average DECIMAL(5,2) NOT NULL DEFAULT 0, -- moyenne annuelle finale (points de jury inclus)
+    average_s1 DECIMAL(5,2) NULL,
+    average_s2 DECIMAL(5,2) NULL,
+    credits_s1 DECIMAL(4,1) NOT NULL DEFAULT 0,
+    credits_s2 DECIMAL(4,1) NOT NULL DEFAULT 0,
+    credits_total DECIMAL(4,1) NOT NULL DEFAULT 0, -- sur 60
+    is_complete TINYINT(1) NOT NULL DEFAULT 0,
     class_rank INT UNSIGNED NULL,
-    decision ENUM('admis','ajourne','redouble','exclu') NOT NULL DEFAULT 'ajourne',
+    decision ENUM('admis','admis_dettes','ajourne','redouble','exclu') NOT NULL DEFAULT 'ajourne',
+    jury_decision ENUM('admis','admis_dettes','ajourne','redouble','exclu') NULL, -- decision imposee par le jury
+    jury_points DECIMAL(4,2) NOT NULL DEFAULT 0,
+    observation VARCHAR(255) NULL,
+    jury_id INT UNSIGNED NULL,
     mention VARCHAR(50) NULL,
     published TINYINT(1) NOT NULL DEFAULT 0,
+    computed_at DATETIME NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
     FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
     FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE CASCADE,
+    FOREIGN KEY (jury_id) REFERENCES juries(id) ON DELETE SET NULL,
     UNIQUE KEY uniq_result (student_id, academic_year_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -305,21 +340,29 @@ CREATE TABLE IF NOT EXISTS juries (
     academic_year_id INT UNSIGNED NOT NULL,
     class_id INT UNSIGNED NOT NULL,
     name VARCHAR(150) NOT NULL,
+    session_type ENUM('normale','rattrapage') NOT NULL DEFAULT 'normale',
     session_date DATE NULL,
+    location VARCHAR(150) NULL,
     status ENUM('planifie','en_cours','cloture') NOT NULL DEFAULT 'planifie',
+    deliberated_at DATETIME NULL,
+    observations TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE CASCADE,
     FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Membres designes : enseignant de l'etablissement (teacher_id) ou personnalite externe (full_name)
 CREATE TABLE IF NOT EXISTS jury_members (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     jury_id INT UNSIGNED NOT NULL,
-    teacher_id INT UNSIGNED NOT NULL,
-    role VARCHAR(50) NOT NULL DEFAULT 'membre', -- president, membre, secretaire
+    teacher_id INT UNSIGNED NULL,
+    full_name VARCHAR(150) NULL,
+    title VARCHAR(150) NULL, -- grade / fonction
+    role ENUM('president','vice_president','secretaire','rapporteur','membre') NOT NULL DEFAULT 'membre',
     FOREIGN KEY (jury_id) REFERENCES juries(id) ON DELETE CASCADE,
-    FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE
+    FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE,
+    UNIQUE KEY uniq_jury_teacher (jury_id, teacher_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------------------------------------------------------
@@ -381,8 +424,8 @@ INSERT INTO subscription_plans (name, slug, price, billing_cycle, max_students, 
 ('Pro', 'pro', 350000.00, 'annuel', 800, 80, 'Inscriptions,Paiements,Notes,Emploi du temps,Resultats,Jurys', 1),
 ('Enterprise', 'enterprise', 750000.00, 'annuel', 5000, 300, 'Toutes fonctionnalites + support prioritaire', 1);
 
-INSERT INTO clients (name, slug, email, phone, address, plan_id, status, trial_ends_at) VALUES
-('Institut Superieur SCHOOMA (Demo)', 'schooma-demo', 'contact@schooma.igotech.tech', '+000000000', 'Adresse a definir', 2, 'actif', NULL);
+INSERT INTO clients (name, slug, email, phone, address, city, plan_id, status, trial_ends_at) VALUES
+('Institut Superieur SCHOOMA (Demo)', 'schooma-demo', 'contact@schooma.igotech.tech', '+000000000', 'Adresse a definir', 'N''Djamena', 2, 'actif', NULL);
 
 -- Mot de passe par defaut : Admin@2026 (a changer immediatement apres 1re connexion)
 -- Hash genere avec password_hash('Admin@2026', PASSWORD_BCRYPT)
